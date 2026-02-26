@@ -1,0 +1,82 @@
+@import './tailwind.css';
+@import './theme.css';
+
+/* ─── Rich Text Editor prose output ─────────────────────────────────────── */
+[contenteditable], .rich-text-output {
+  font-family: var(--font-family-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-regular);
+  color: var(--foreground);
+  line-height: 22px;
+}
+
+[contenteditable] h2, .rich-text-output h2 {
+  font-family: var(--font-family-primary);
+  font-size: 18px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 26px;
+  color: var(--foreground);
+  margin: 12px 0 6px;
+}
+
+[contenteditable] h3, .rich-text-output h3 {
+  font-family: var(--font-family-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: 22px;
+  color: var(--foreground);
+  margin: 10px 0 4px;
+}
+
+[contenteditable] h4, .rich-text-output h4 {
+  font-family: var(--font-family-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: 20px;
+  color: var(--foreground);
+  margin: 8px 0 4px;
+}
+
+[contenteditable] p, .rich-text-output p {
+  font-family: var(--font-family-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-regular);
+  color: var(--foreground);
+  margin: 0 0 6px;
+  line-height: 22px;
+}
+
+[contenteditable] ul, .rich-text-output ul {
+  padding-left: 20px;
+  margin: 6px 0;
+  list-style: disc;
+}
+
+[contenteditable] ol, .rich-text-output ol {
+  padding-left: 20px;
+  margin: 6px 0;
+  list-style: decimal;
+}
+
+[contenteditable] li, .rich-text-output li {
+  font-family: var(--font-family-primary);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-regular);
+  color: var(--foreground);
+  line-height: 22px;
+  margin-bottom: 2px;
+}
+
+[contenteditable] hr, .rich-text-output hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+[contenteditable] strong, .rich-text-output strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+[contenteditable] em, .rich-text-output em {
+  font-style: italic;
+}
