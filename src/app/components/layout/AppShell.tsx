@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FileText, Menu, X, ChevronRight,
   SlidersHorizontal, ChevronDown, Activity, Package, ShieldAlert, ShieldCheck,
   BookOpen, BarChart2, LayoutGrid, TrendingUp, Target, FileBarChart, Globe,
-  Briefcase, ScrollText,
+  Briefcase, ScrollText, Users,
 } from 'lucide-react';
 
 type NavItem = { path: string; label: string; icon: React.ElementType; exact?: boolean };
@@ -50,7 +50,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupLabel: 'Third-Party',
     items: [
-      { path: '/employers', label: 'Employer Register', icon: Briefcase },
+      { path: '/entities', label: 'Entity Register', icon: Briefcase },
+      { path: '/personas', label: 'Persona Register', icon: Users },
     ],
   },
 ];
@@ -102,9 +103,12 @@ function getBreadcrumbs(pathname: string) {
     if (pathname !== '/compliance') crumbs.push({ label: 'Framework Detail', path: pathname });
   } else if (pathname.startsWith('/enterprise-risk-dashboard')) {
     crumbs.push({ label: 'Risk Dashboard', path: '/enterprise-risk-dashboard' });
-  } else if (pathname.startsWith('/employers')) {
-    crumbs.push({ label: 'Employer Management', path: '/employers' });
-    if (pathname !== '/employers') crumbs.push({ label: 'Employer Detail', path: pathname });
+  } else if (pathname.startsWith('/entities')) {
+    crumbs.push({ label: 'Entity Register', path: '/entities' });
+    if (pathname !== '/entities') crumbs.push({ label: 'Entity Detail', path: pathname });
+  } else if (pathname.startsWith('/personas')) {
+    crumbs.push({ label: 'Persona Register', path: '/personas' });
+    if (pathname !== '/personas') crumbs.push({ label: 'Persona Detail', path: pathname });
   } else if (pathname.startsWith('/regulations')) {
     crumbs.push({ label: 'Regulations', path: '/regulations' });
     if (pathname !== '/regulations') crumbs.push({ label: 'Regulation Detail', path: pathname });

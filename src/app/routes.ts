@@ -32,6 +32,8 @@ import { BillTracker } from './pages/BillTracker';
 import { BillDetail } from './pages/BillDetail';
 import { RegulatoryComplianceDashboard } from './pages/RegulatoryComplianceDashboard';
 import { PlanDetail } from './pages/PlanDetail';
+import { PersonaList } from './pages/PersonaList';
+import { PersonaDetail } from './pages/PersonaDetail';
 
 export const router = createBrowserRouter([
   {
@@ -69,8 +71,10 @@ export const router = createBrowserRouter([
       { path: 'compliance/:id', Component: FrameworkDetail },
       { path: 'enterprise-risk-dashboard', Component: EnterpriseDashboard },
       { path: 'configuration', Component: Configuration },
-      { path: 'employers', Component: EmployerList },
-      { path: 'employers/:id', Component: EmployerDetail },
+      { path: 'entities', Component: EmployerList },
+      { path: 'entities/:id', Component: EmployerDetail },
+      { path: 'personas', Component: PersonaList },
+      { path: 'personas/:id', Component: PersonaDetail },
       { path: 'regulations', Component: RegulationRegister },
       { path: 'regulations/:id', Component: RegulationDetail },
       { path: 'bills', Component: BillTracker },
