@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router';
 import {
   BookOpen, ShieldCheck, AlertTriangle, Calendar,
   Plus, Edit2, ChevronRight, CheckCircle, XCircle, Clock,
-  Award,
+  Award, FileText, ScrollText,
 } from 'lucide-react';
 import { KPITile } from '../components/shared/KPITile';
 import { FrameworkFormModal } from '../components/compliance/FrameworkFormModal';
+import { RegulatoryCalendar } from '../components/compliance/RegulatoryCalendar';
 import type { ComplianceFramework } from '../data/complianceFrameworkData';
 import {
   loadFrameworks, saveFrameworks,
@@ -19,6 +20,9 @@ import {
   loadControlRequirementMappings,
   IMPLEMENTATION_STATUS_LABELS, IMPLEMENTATION_STATUS_STYLES,
 } from '../data/controlRequirementData';
+import { loadRegulations } from '../data/regulationData';
+import { loadRegulationRequirements, calculateRequirementCoverage } from '../data/regulationRequirementData';
+import { loadBills } from '../data/billData';
 import { formatDate } from '../data/mockData';
 import { generateId } from '../data/mockData';
 

@@ -2,12 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Edit2, Trash2, ShieldCheck, User,
-  Building2, Clock, Zap, Link2, Plus, X, Star,
-  ShieldAlert, ExternalLink,
+  Building2, Clock, Zap, AlertTriangle,
 } from 'lucide-react';
 import { UserChip } from '../components/shared/UserPicker';
 import { ControlFormModal } from '../components/controls/ControlFormModal';
-import { LinkRiskToControlModal } from '../components/controls/RiskControlLinkModal';
+import { ControlRisksSection } from '../components/controls/ControlRisksSection';
 import { ControlFrameworkSection } from '../components/compliance/ControlFrameworkSection';
 import { ControlProcessesSection } from '../components/controls/ControlProcessesSection';
 import type { Control, ControlStatus, ControlType, ControlEffectiveness } from '../data/controlData';
@@ -18,11 +17,10 @@ import {
   CONTROL_EFFECTIVENESS_STYLES,
 } from '../data/controlData';
 import type { Risk } from '../data/riskData';
-import { loadRisks, RISK_STATUS_LABELS } from '../data/riskData';
+import { loadRisks } from '../data/riskData';
 import type { RiskControl } from '../data/riskControlData';
 import {
   loadRiskControls, saveRiskControls, getRisksForControl,
-  COVERAGE_LEVEL_LABELS, COVERAGE_LEVEL_STYLES,
 } from '../data/riskControlData';
 import type { ComplianceFramework } from '../data/complianceFrameworkData';
 import { loadFrameworks } from '../data/complianceFrameworkData';
@@ -30,11 +28,15 @@ import type { FrameworkRequirement } from '../data/frameworkRequirementData';
 import { loadRequirements } from '../data/frameworkRequirementData';
 import type { ControlRequirementMapping } from '../data/controlRequirementData';
 import { loadControlRequirementMappings, saveControlRequirementMappings, getMappingsForControl } from '../data/controlRequirementData';
-import { formatDate, MOCK_USERS } from '../data/mockData';
+import { formatDate } from '../data/mockData';
 import type { Process } from '../data/processData';
 import { loadProcesses } from '../data/processData';
 import type { ProcessControlLink } from '../data/processControlData';
 import { loadProcessControlLinks, saveProcessControlLinks } from '../data/processControlData';
+
+// ─── Tab type ────────────────────────────────────────────────────────────────
+
+type TabKey = 'overview' | 'risks' | 'processes' | 'frameworks';
 
 // ─── Badge helpers ───────────────────────────────────────────────────────────
 
@@ -153,10 +155,94 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
         color: 'var(--foreground)',
         margin: 0,
         lineHeight: '20px',
+        paddingBottom: '8px',
+        borderBottom: '1px solid var(--border)',
       }}
     >
       {children}
     </h3>
+  );
+}
+
+// ─── Tab Button Bar ──────────────────────────────────────────────────────────
+
+interface TabDef {
+  key: TabKey;
+  label: string;
+  count?: number;
+}
+
+function TabButtonBar({
+  tabs,
+  activeTab,
+  onTabChange,
+}: {
+  tabs: TabDef[];
+  activeTab: TabKey;
+  onTabChange: (key: TabKey) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        borderBottom: '1px solid var(--border)',
+        gap: '0',
+        overflowX: 'auto',
+      }}
+    >
+      {tabs.map(tab => {
+        const isActive = activeTab === tab.key;
+        return (
+          <button
+            key={tab.key}
+            onClick={() => onTabChange(tab.key)}
+            style={{
+              position: 'relative',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              height: '40px',
+              padding: '0 16px',
+              border: 'none',
+              borderBottom: isActive ? '2px solid var(--primary)' : '2px solid transparent',
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-family-primary)',
+              fontSize: 'var(--text-base)',
+              fontWeight: isActive ? 'var(--font-weight-semibold)' : 'var(--font-weight-regular)',
+              color: isActive ? 'var(--primary)' : 'var(--muted-foreground)',
+              whiteSpace: 'nowrap',
+              transition: 'color 0.15s ease, border-color 0.15s ease',
+              marginBottom: '-1px',
+            }}
+          >
+            {tab.label}
+            {tab.count != null && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '18px',
+                  height: '18px',
+                  padding: '0 5px',
+                  borderRadius: '100px',
+                  background: isActive ? 'rgba(35,34,240,0.08)' : 'var(--muted)',
+                  fontFamily: 'var(--font-family-primary)',
+                  fontSize: '11px',
+                  fontWeight: 'var(--font-weight-semibold)',
+                  color: isActive ? 'var(--primary)' : 'var(--muted-foreground)',
+                  lineHeight: '14px',
+                }}
+              >
+                {tab.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -175,8 +261,7 @@ export function ControlDetail() {
   const [processControlLinks, setProcessControlLinks] = useState<ProcessControlLink[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [linkRiskOpen, setLinkRiskOpen] = useState(false);
-  const [unlinkConfirm, setUnlinkConfirm] = useState<{ riskId: string; riskTitle: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   useEffect(() => {
     setControls(loadControls());
@@ -211,18 +296,30 @@ export function ControlDetail() {
     saveProcessControlLinks(updated);
   }, []);
 
-  // Linked risks for this control
-  const linkedMappings = useMemo(
-    () => (id ? getRisksForControl(riskControls, id) : []),
+  // Linked risks count for tab badge
+  const linkedRisksCount = useMemo(
+    () => (id ? getRisksForControl(riskControls, id).length : 0),
     [riskControls, id]
   );
 
-  function handleSaveControl(data: Omit<Control, 'id' | 'createdAt' | 'updatedAt'>) {
+  // Framework mappings count for tab badge
+  const frameworkMappingsCount = useMemo(
+    () => (id ? getMappingsForControl(crMappings, id).length : 0),
+    [crMappings, id]
+  );
+
+  // Process links count for tab badge
+  const processLinksCount = useMemo(
+    () => processControlLinks.filter(l => l.controlId === id).length,
+    [processControlLinks, id]
+  );
+
+  function handleSaveControl(data: Omit<Control, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>) {
     if (!control) return;
     const today = new Date().toISOString().split('T')[0];
     const updated = controls.map(c =>
       c.id === control.id
-        ? { ...c, ...data, updatedAt: today }
+        ? { ...c, ...data, updatedAt: today, updatedBy: 'Emily Carter' }
         : c
     );
     persistControls(updated);
@@ -230,30 +327,8 @@ export function ControlDetail() {
 
   function handleDelete() {
     if (!control) return;
-    // Remove control
     persistControls(controls.filter(c => c.id !== control.id));
-    // Remove all risk-control mappings for this control
-    persistRiskControls(riskControls.filter(rc => rc.controlId !== control.id));
-    // Remove all control-requirement mappings for this control
-    persistCrMappings(crMappings.filter(m => m.controlId !== control.id));
-    // Remove all process-control links for this control
-    persistProcessControlLinks(processControlLinks.filter(l => l.controlId !== control.id));
     navigate('/controls');
-  }
-
-  function handleLinkRisk(mapping: Omit<RiskControl, 'createdAt' | 'createdBy'>) {
-    const now = new Date().toISOString().split('T')[0];
-    const newMapping: RiskControl = {
-      ...mapping,
-      createdAt: now,
-      createdBy: MOCK_USERS[0], // Emily Carter
-    };
-    persistRiskControls([...riskControls, newMapping]);
-  }
-
-  function handleUnlinkRisk(riskId: string) {
-    persistRiskControls(riskControls.filter(rc => !(rc.controlId === id && rc.riskId === riskId)));
-    setUnlinkConfirm(null);
   }
 
   if (!control) {
@@ -305,7 +380,7 @@ export function ControlDetail() {
             cursor: 'pointer',
           }}
         >
-          Back to Control Registry
+          Back to Control Register
         </button>
       </div>
     );
@@ -313,6 +388,14 @@ export function ControlDetail() {
 
   const today = new Date().toISOString().split('T')[0];
   const isTestOverdue = control.status === 'active' && control.nextTestDate && control.nextTestDate < today;
+
+  // Tab definitions with counts
+  const tabDefs: TabDef[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'risks', label: 'Risks', count: linkedRisksCount || undefined },
+    { key: 'processes', label: 'Processes', count: processLinksCount || undefined },
+    { key: 'frameworks', label: 'Frameworks', count: frameworkMappingsCount || undefined },
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -334,7 +417,7 @@ export function ControlDetail() {
         }}
       >
         <ArrowLeft size={14} />
-        Back to Control Registry
+        Back to Control Register
       </button>
 
       {/* Record Summary Header */}
@@ -407,7 +490,7 @@ export function ControlDetail() {
                     fontWeight: 'var(--font-weight-semibold)',
                   }}
                 >
-                  <Clock size={10} />
+                  <AlertTriangle size={10} />
                   Test Overdue
                 </span>
               )}
@@ -453,7 +536,7 @@ export function ControlDetail() {
                   {control.owner.name}
                 </span>
               )}
-              {control.frameworkRef && (
+              {control.nextTestDate && (
                 <span
                   style={{
                     display: 'inline-flex',
@@ -461,11 +544,11 @@ export function ControlDetail() {
                     gap: '4px',
                     fontFamily: 'var(--font-family-primary)',
                     fontSize: '12px',
-                    color: 'var(--muted-foreground)',
+                    color: isTestOverdue ? 'var(--destructive)' : 'var(--muted-foreground)',
                   }}
                 >
-                  <ExternalLink size={12} />
-                  {control.frameworkRef}
+                  <Clock size={12} />
+                  Next Test: {formatDate(control.nextTestDate)}
                 </span>
               )}
             </div>
@@ -519,330 +602,42 @@ export function ControlDetail() {
         </div>
       </div>
 
-      {/* Detail Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
-        {/* Description Card */}
-        <div
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-card)',
-            padding: '24px',
-            gridColumn: '1 / -1',
-          }}
-        >
-          <SectionTitle>Description</SectionTitle>
-          <p
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-regular)',
-              color: 'var(--foreground)',
-              lineHeight: '24px',
-              margin: '12px 0 0 0',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {control.description || '—'}
-          </p>
-        </div>
+      {/* ─── Tab Bar ──────────────────────────────────────────────────────── */}
+      <TabButtonBar tabs={tabDefs} activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Control Properties Card */}
-        <div
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-card)',
-            padding: '24px',
-          }}
-        >
-          <SectionTitle>Control Properties</SectionTitle>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-            <DetailField label="Control Type">
-              <TypeBadge type={control.controlType} />
-            </DetailField>
-            <DetailField label="Frequency">
-              {CONTROL_FREQUENCY_LABELS[control.frequency]}
-            </DetailField>
-            <DetailField label="Effectiveness">
-              <EffBadge effectiveness={control.effectiveness} />
-            </DetailField>
-            <DetailField label="Automated">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                {control.isAutomated ? <Zap size={14} style={{ color: '#00A3A3' }} /> : null}
-                {control.isAutomated ? 'Yes — Automated' : 'No — Manual'}
-              </span>
-            </DetailField>
-            {control.frameworkRef && (
-              <DetailField label="Framework Reference">
-                {control.frameworkRef}
-              </DetailField>
-            )}
-          </div>
-        </div>
+      {/* ─── Tab Content ──────────────────────────────────────────────────── */}
 
-        {/* Ownership & Testing Card */}
-        <div
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-card)',
-            padding: '24px',
-          }}
-        >
-          <SectionTitle>Ownership & Testing</SectionTitle>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-            <DetailField label="Owner">
-              {control.owner ? <UserChip user={control.owner} /> : '—'}
-            </DetailField>
-            <DetailField label="Department">
-              {control.department}
-            </DetailField>
-            <DetailField label="Last Tested">
-              {control.lastTestedDate ? formatDate(control.lastTestedDate) : 'Never tested'}
-            </DetailField>
-            <DetailField label="Next Test Date">
-              <span style={{ color: isTestOverdue ? 'var(--destructive)' : undefined }}>
-                {control.nextTestDate ? formatDate(control.nextTestDate) : '—'}
-                {isTestOverdue && ' (Overdue)'}
-              </span>
-            </DetailField>
-            <DetailField label="Created">
-              {formatDate(control.createdAt)}
-            </DetailField>
-            <DetailField label="Last Updated">
-              {formatDate(control.updatedAt)}
-            </DetailField>
-          </div>
-        </div>
-      </div>
+      {activeTab === 'overview' && (
+        <OverviewTab control={control} isTestOverdue={isTestOverdue} />
+      )}
 
-      {/* ─── Linked Risks Section ──────────────────────────────────────────── */}
-      <div
-        style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-card)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Section header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 24px',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <SectionTitle>Linked Risks</SectionTitle>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minWidth: '20px',
-                height: '20px',
-                padding: '0 6px',
-                borderRadius: '100px',
-                background: 'rgba(35,34,240,0.08)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '11px',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--primary)',
-              }}
-            >
-              {linkedMappings.length}
-            </span>
-          </div>
-          <button
-            onClick={() => setLinkRiskOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '28px',
-              padding: '0 12px',
-              border: '1px solid var(--primary)',
-              borderRadius: 'var(--radius-button)',
-              background: 'transparent',
-              color: 'var(--primary)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-            }}
-          >
-            <Plus size={12} />
-            Link Risk
-          </button>
-        </div>
+      {activeTab === 'risks' && (
+        <ControlRisksSection
+          controlId={control.id}
+          risks={risks}
+          riskControls={riskControls}
+          onRiskControlsChange={persistRiskControls}
+        />
+      )}
 
-        {linkedMappings.length === 0 ? (
-          <div
-            style={{
-              padding: '32px 24px',
-              textAlign: 'center',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              color: 'var(--muted-foreground)',
-            }}
-          >
-            No risks linked to this control yet.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px' }}>
-              <thead>
-                <tr style={{ background: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
-                  {['Risk', 'Status', 'Coverage', 'Primary', 'Notes', ''].map(h => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '0 16px',
-                        height: '40px',
-                        textAlign: 'left',
-                        fontFamily: 'var(--font-family-primary)',
-                        fontSize: '12px',
-                        fontWeight: 'var(--font-weight-semibold)',
-                        color: 'var(--muted-foreground)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {linkedMappings.map((mapping, idx) => {
-                  const risk = risks.find(r => r.id === mapping.riskId);
-                  if (!risk) return null;
-                  const covStyle = COVERAGE_LEVEL_STYLES[mapping.coverageLevel];
-                  return (
-                    <tr
-                      key={mapping.riskId}
-                      style={{
-                        background: idx % 2 === 0 ? 'var(--card)' : 'var(--muted)',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <td style={{ padding: '0 16px', height: '40px' }}>
-                        <span
-                          onClick={() => navigate(`/risks/${risk.id}`)}
-                          style={{
-                            fontFamily: 'var(--font-family-primary)',
-                            fontSize: 'var(--text-base)',
-                            fontWeight: 'var(--font-weight-semibold)',
-                            color: 'var(--primary)',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {risk.title}
-                        </span>
-                        <div
-                          style={{
-                            fontFamily: 'var(--font-family-primary)',
-                            fontSize: '12px',
-                            color: 'var(--muted-foreground)',
-                          }}
-                        >
-                          {risk.id} · {risk.department}
-                        </div>
-                      </td>
-                      <td style={{ padding: '0 16px', height: '40px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: '20px',
-                            padding: '0 8px',
-                            borderRadius: '100px',
-                            fontFamily: 'var(--font-family-primary)',
-                            fontSize: '12px',
-                            fontWeight: 'var(--font-weight-semibold)',
-                            textTransform: 'capitalize',
-                            background: risk.status === 'active' ? '#E8F5EE' : '#F0F0F0',
-                            color: risk.status === 'active' ? '#1C8A45' : '#6B7489',
-                          }}
-                        >
-                          {RISK_STATUS_LABELS[risk.status]}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0 16px', height: '40px' }}>
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: '20px',
-                            padding: '0 8px',
-                            borderRadius: '100px',
-                            background: covStyle.background,
-                            color: covStyle.color,
-                            fontFamily: 'var(--font-family-primary)',
-                            fontSize: '12px',
-                            fontWeight: 'var(--font-weight-semibold)',
-                          }}
-                        >
-                          {COVERAGE_LEVEL_LABELS[mapping.coverageLevel]}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0 16px', height: '40px' }}>
-                        {mapping.isPrimary && (
-                          <Star size={14} style={{ color: '#E07B00', fill: '#E07B00' }} />
-                        )}
-                      </td>
-                      <td
-                        style={{
-                          padding: '0 16px',
-                          height: '40px',
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: '12px',
-                          color: 'var(--muted-foreground)',
-                          maxWidth: '200px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                        title={mapping.mappingNotes}
-                      >
-                        {mapping.mappingNotes || '—'}
-                      </td>
-                      <td style={{ padding: '0 16px', height: '40px' }}>
-                        <button
-                          onClick={() => setUnlinkConfirm({ riskId: risk.id, riskTitle: risk.title })}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            height: '24px',
-                            padding: '0 8px',
-                            border: 'none',
-                            borderRadius: 'var(--radius-input)',
-                            background: 'transparent',
-                            color: 'var(--destructive)',
-                            fontFamily: 'var(--font-family-primary)',
-                            fontSize: '11px',
-                            fontWeight: 'var(--font-weight-semibold)',
-                            cursor: 'pointer',
-                          }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(192,57,43,0.06)'; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                        >
-                          <X size={10} />
-                          Unlink
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {activeTab === 'processes' && (
+        <ControlProcessesSection
+          controlId={control.id}
+          processLinks={processControlLinks}
+          processes={processes}
+          onLinksChange={persistProcessControlLinks}
+        />
+      )}
+
+      {activeTab === 'frameworks' && (
+        <ControlFrameworkSection
+          controlId={control.id}
+          frameworks={frameworks}
+          requirements={fwRequirements}
+          mappings={crMappings}
+          onMappingsChange={persistCrMappings}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmOpen && (
@@ -890,11 +685,7 @@ export function ControlDetail() {
                 lineHeight: '22px',
               }}
             >
-              Are you sure you want to delete <strong>{control.name}</strong>?
-              {linkedMappings.length > 0 && (
-                <> This will also remove {linkedMappings.length} risk mapping{linkedMappings.length > 1 ? 's' : ''}.</>
-              )}
-              {' '}This action cannot be undone.
+              Are you sure you want to delete <strong>{control.name}</strong>? This action cannot be undone.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button
@@ -936,128 +727,159 @@ export function ControlDetail() {
         </div>
       )}
 
-      {/* Unlink Confirmation Dialog */}
-      {unlinkConfirm && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.4)',
-            padding: '24px',
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setUnlinkConfirm(null); }}
-        >
-          <div
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)',
-              boxShadow: '0px 8px 32px rgba(0,0,0,0.18)',
-              padding: '24px',
-              maxWidth: '400px',
-              width: '100%',
-            }}
-          >
-            <h3
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '18px',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--foreground)',
-                margin: '0 0 8px 0',
-              }}
-            >
-              Unlink Risk
-            </h3>
-            <p
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                color: 'var(--muted-foreground)',
-                margin: '0 0 24px 0',
-                lineHeight: '22px',
-              }}
-            >
-              Are you sure you want to remove the mapping between this control and <strong>{unlinkConfirm.riskTitle}</strong>?
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-              <button
-                onClick={() => setUnlinkConfirm(null)}
-                style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-button)',
-                  background: 'var(--card)',
-                  color: 'var(--foreground)',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleUnlinkRisk(unlinkConfirm.riskId)}
-                style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  border: 'none',
-                  borderRadius: 'var(--radius-button)',
-                  background: 'var(--destructive)',
-                  color: 'var(--destructive-foreground)',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  cursor: 'pointer',
-                }}
-              >
-                Unlink
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Edit Modal */}
       <ControlFormModal
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
         onSave={handleSaveControl}
         initialData={control}
+        allControls={controls}
       />
+    </div>
+  );
+}
 
-      {/* Link Risk Modal */}
-      <LinkRiskToControlModal
-        isOpen={linkRiskOpen}
-        onClose={() => setLinkRiskOpen(false)}
-        onSave={handleLinkRisk}
-        controlId={control.id}
-        risks={risks}
-        existingMappings={riskControls}
-      />
+// ─── Overview Tab ────────────────────────────────────────────────────────────
 
-      {/* Associated Processes Section */}
-      <ControlProcessesSection
-        controlId={control.id}
-        processLinks={processControlLinks}
-        processes={processes}
-        onLinksChange={persistProcessControlLinks}
-      />
+function OverviewTab({
+  control,
+  isTestOverdue,
+}: {
+  control: Control;
+  isTestOverdue: boolean;
+}) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '16px' }}>
+      {/* Description Card */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          padding: '24px',
+          gridColumn: '1 / -1',
+        }}
+      >
+        <SectionTitle>Description</SectionTitle>
+        <p
+          style={{
+            fontFamily: 'var(--font-family-primary)',
+            fontSize: 'var(--text-base)',
+            fontWeight: 'var(--font-weight-regular)',
+            color: 'var(--foreground)',
+            lineHeight: '24px',
+            margin: '12px 0 0 0',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {control.description || '—'}
+        </p>
+      </div>
 
-      {/* Framework Section */}
-      <ControlFrameworkSection
-        controlId={control.id}
-        frameworks={frameworks}
-        requirements={fwRequirements}
-        mappings={crMappings}
-        onMappingsChange={persistCrMappings}
-      />
+      {/* Control Properties Card */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          padding: '24px',
+        }}
+      >
+        <SectionTitle>Control Properties</SectionTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+          <DetailField label="Control Type">
+            <TypeBadge type={control.controlType} />
+          </DetailField>
+          <DetailField label="Frequency">
+            {CONTROL_FREQUENCY_LABELS[control.frequency]}
+          </DetailField>
+          <DetailField label="Effectiveness">
+            <EffBadge effectiveness={control.effectiveness} />
+          </DetailField>
+          <DetailField label="Automated">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              {control.isAutomated ? <Zap size={14} style={{ color: '#00A3A3' }} /> : null}
+              {control.isAutomated ? 'Yes — Automated' : 'No — Manual'}
+            </span>
+          </DetailField>
+          {control.frameworkRef && (
+            <DetailField label="Framework Reference">
+              {control.frameworkRef}
+            </DetailField>
+          )}
+        </div>
+      </div>
+
+      {/* Ownership & Testing Card */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          padding: '24px',
+        }}
+      >
+        <SectionTitle>Ownership & Testing</SectionTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+          <DetailField label="Owner">
+            {control.owner ? <UserChip user={control.owner} /> : '—'}
+          </DetailField>
+          <DetailField label="Department">
+            {control.department}
+          </DetailField>
+          <DetailField label="Last Tested">
+            {control.lastTestedDate ? formatDate(control.lastTestedDate) : 'Never tested'}
+          </DetailField>
+          <DetailField label="Next Test Date">
+            <span
+              style={{
+                color: isTestOverdue ? 'var(--destructive)' : 'var(--foreground)',
+                fontWeight: isTestOverdue ? 'var(--font-weight-semibold)' : 'var(--font-weight-regular)',
+              }}
+            >
+              {control.nextTestDate ? formatDate(control.nextTestDate) : '—'}
+              {isTestOverdue && ' (Overdue)'}
+            </span>
+          </DetailField>
+          <DetailField label="Status">
+            <StatusBadge status={control.status} />
+          </DetailField>
+        </div>
+      </div>
+
+      {/* Audit Trail Card */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          padding: '24px',
+          gridColumn: '1 / -1',
+        }}
+      >
+        <SectionTitle>Audit Trail</SectionTitle>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '16px',
+            marginTop: '16px',
+          }}
+        >
+          <DetailField label="Created At">
+            {control.createdAt ? formatDate(control.createdAt) : '—'}
+          </DetailField>
+          <DetailField label="Created By">
+            {control.createdBy || '—'}
+          </DetailField>
+          <DetailField label="Updated At">
+            {control.updatedAt ? formatDate(control.updatedAt) : '—'}
+          </DetailField>
+          <DetailField label="Updated By">
+            {control.updatedBy || '—'}
+          </DetailField>
+        </div>
+      </div>
     </div>
   );
 }

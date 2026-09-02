@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FileText, Menu, X, ChevronRight,
   SlidersHorizontal, ChevronDown, Activity, Package, ShieldAlert, ShieldCheck,
   BookOpen, BarChart2, LayoutGrid, TrendingUp, Target, FileBarChart, Globe,
-  Briefcase,
+  Briefcase, ScrollText,
 } from 'lucide-react';
 
 type NavItem = { path: string; label: string; icon: React.ElementType; exact?: boolean };
@@ -30,25 +30,27 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    groupLabel: 'Benefits or Services and Process Mgmt.',
+    groupLabel: 'Operations',
     items: [
-      { path: '/products',  label: 'Benefits or Services Registry', icon: Package },
-      { path: '/processes', label: 'Process Registry', icon: Activity },
+      { path: '/products',  label: 'Benefits or Services Register', icon: Package },
+      { path: '/processes', label: 'Process Register', icon: Activity },
     ],
   },
   {
-    groupLabel: 'Risk Management',
+    groupLabel: 'Risk & Controls',
     items: [
-      { path: '/risk-dashboard', label: 'Risk Registry', icon: ShieldAlert },
-      { path: '/controls', label: 'Control Registry', icon: ShieldCheck },
+      { path: '/risk-dashboard', label: 'Risk Register', icon: ShieldAlert },
+      { path: '/controls', label: 'Control Register', icon: ShieldCheck },
       { path: '/compliance', label: 'Framework', icon: BookOpen },
-      { path: '/enterprise-risk-dashboard', label: 'Risk Dashboard', icon: BarChart2 },
+      { path: '/regulations', label: 'Regulations', icon: FileText },
+      { path: '/bills', label: 'Bills & Legislation', icon: ScrollText },
+      { path: '/regulatory-compliance-dashboard', label: 'Regulatory Dashboard', icon: BarChart2 },
     ],
   },
   {
-    groupLabel: 'Employer Management',
+    groupLabel: 'Third-Party',
     items: [
-      { path: '/employers', label: 'Employer Registry', icon: Briefcase },
+      { path: '/employers', label: 'Employer Register', icon: Briefcase },
     ],
   },
 ];
@@ -77,20 +79,20 @@ function getBreadcrumbs(pathname: string) {
     crumbs.push({ label: 'Contracts', path: '/contracts' });
     if (pathname !== '/contracts') crumbs.push({ label: 'Contract Detail', path: pathname });
   } else if (pathname.startsWith('/processes')) {
-    crumbs.push({ label: 'Process Registry', path: '/processes' });
+    crumbs.push({ label: 'Process Register', path: '/processes' });
     if (pathname !== '/processes') crumbs.push({ label: 'Process Detail', path: pathname });
   } else if (pathname.startsWith('/products')) {
-    crumbs.push({ label: 'Benefits or Services Registry', path: '/products' });
+    crumbs.push({ label: 'Benefits or Services Register', path: '/products' });
     if (pathname !== '/products') crumbs.push({ label: 'Benefit or Service Detail', path: pathname });
   } else if (pathname.startsWith('/configuration')) {
     crumbs.push({ label: 'Configuration', path: '/configuration' });
   } else if (pathname.startsWith('/risk-dashboard')) {
-    crumbs.push({ label: 'Risk Registry', path: '/risk-dashboard' });
+    crumbs.push({ label: 'Risk Register', path: '/risk-dashboard' });
   } else if (pathname.startsWith('/risks')) {
-    crumbs.push({ label: 'Risk Registry', path: '/risk-dashboard' });
+    crumbs.push({ label: 'Risk Register', path: '/risk-dashboard' });
     crumbs.push({ label: 'Risk Detail', path: pathname });
   } else if (pathname.startsWith('/controls')) {
-    crumbs.push({ label: 'Control Registry', path: '/controls' });
+    crumbs.push({ label: 'Control Register', path: '/controls' });
     if (pathname !== '/controls') crumbs.push({ label: 'Control Detail', path: pathname });
   } else if (pathname.startsWith('/compliance')) {
     crumbs.push({ label: 'Framework', path: '/compliance' });
@@ -100,6 +102,14 @@ function getBreadcrumbs(pathname: string) {
   } else if (pathname.startsWith('/employers')) {
     crumbs.push({ label: 'Employer Management', path: '/employers' });
     if (pathname !== '/employers') crumbs.push({ label: 'Employer Detail', path: pathname });
+  } else if (pathname.startsWith('/regulations')) {
+    crumbs.push({ label: 'Regulations', path: '/regulations' });
+    if (pathname !== '/regulations') crumbs.push({ label: 'Regulation Detail', path: pathname });
+  } else if (pathname.startsWith('/bills')) {
+    crumbs.push({ label: 'Bills & Legislation', path: '/bills' });
+    if (pathname !== '/bills') crumbs.push({ label: 'Bill Detail', path: pathname });
+  } else if (pathname.startsWith('/regulatory-compliance-dashboard')) {
+    crumbs.push({ label: 'Regulatory Dashboard', path: '/regulatory-compliance-dashboard' });
   }
   return crumbs;
 }
@@ -499,11 +509,12 @@ function SidebarNavGroup({
             fontFamily: 'var(--font-family-primary)',
             fontSize: '11px',
             fontWeight: 'var(--font-weight-semibold)',
-            color: 'rgba(148, 180, 218, 0.85)',
+            color: 'var(--sidebar-foreground, rgba(255, 255, 255, 0.85))',
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
             textAlign: 'left',
             flex: 1,
+            opacity: 0.85,
           }}
         >
           {group.groupLabel}
@@ -511,10 +522,11 @@ function SidebarNavGroup({
         <ChevronDown
           size={12}
           style={{
-            color: 'rgba(148, 180, 218, 0.6)',
+            color: 'var(--sidebar-foreground, rgba(255, 255, 255, 0.6))',
             flexShrink: 0,
             transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
             transition: 'transform 0.18s ease',
+            opacity: 0.6,
           }}
         />
       </button>

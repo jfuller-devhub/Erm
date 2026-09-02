@@ -148,7 +148,7 @@ function ProcessAssociationPicker({
           textAlign: 'center',
         }}
       >
-        No processes available. Create processes first in the Process Registry.
+        No processes available. Create processes first in the Process Register.
       </div>
     );
   }

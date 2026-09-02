@@ -424,7 +424,7 @@ function EnterpriseRiskList({
           No enterprise risks defined
         </p>
         <p style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', margin: 0, textAlign: 'center' }}>
-          Mark a risk as "Enterprise Risk" in the Risk Registry to see it here.
+          Mark a risk as "Enterprise Risk" in the Risk Register to see it here.
         </p>
       </div>
     );
@@ -708,7 +708,7 @@ function RisksByDepartmentChart({ risks }: { risks: Risk[] }) {
   );
 }
 
-// ─── Chart: Risks by Appetite ────────────────────────────────────────────��───
+// ─── Chart: Risks by Appetite ───────────────────────────────────────────────
 
 function RisksByAppetiteChart({ risks }: { risks: Risk[] }) {
   const data = useMemo(() =>

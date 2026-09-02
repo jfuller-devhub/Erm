@@ -400,7 +400,7 @@ export function ProcessDashboard() {
               lineHeight: '30px',
             }}
           >
-            Process Registry
+            Process Register
           </h2>
           <p
             style={{
@@ -601,7 +601,7 @@ export function ProcessDashboard() {
           <EmptyState
             icon={Activity}
             title="No processes yet"
-            description="Create your first process to start building the enterprise process registry."
+            description="Create your first process to start building the enterprise process register."
             action={{ label: 'New Process', onClick: openNew }}
           />
         ) : (

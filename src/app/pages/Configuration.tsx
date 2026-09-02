@@ -3,6 +3,9 @@ import { Plus, Search, Edit2, Trash2, SlidersHorizontal, ToggleLeft, ToggleRight
 import { useApp } from '../context/AppContext';
 import { FormModal, Field, TextInput, SelectInput } from '../components/shared/FormModal';
 import type { ConfigOption, ConfigTable, ConfigOptionStatus } from '../data/mockData';
+import { VendorClassificationSection } from '../components/configuration/VendorClassificationSection';
+import { VendorLevelSection } from '../components/configuration/VendorLevelSection';
+import { VendorChecklistSection } from '../components/configuration/VendorChecklistSection';
 
 // ─── Field map: which fields are configurable per table ──────────────────────
 
@@ -18,9 +21,10 @@ const CONFIG_FIELD_MAP: Record<ConfigTable, string[]> = {
   Contact:    ['Type'],
   Framework:  ['Status'],
   Compliance: ['Implementation Status'],
+  Checklist:  ['Activity Type'],
 };
 
-const ALL_TABLES: ConfigTable[] = ['Vendor', 'Contract', 'Process', 'Control', 'Risk', 'Mitigation', 'Product', 'Assessment', 'Contact', 'Framework', 'Compliance'];
+const ALL_TABLES: ConfigTable[] = ['Vendor', 'Contract', 'Process', 'Control', 'Risk', 'Mitigation', 'Product', 'Assessment', 'Contact', 'Framework', 'Compliance', 'Checklist'];
 
 // Display labels for coded enum values (so config page shows "Preventive" not "preventive")
 const VALUE_DISPLAY_LABELS: Record<string, string> = {
@@ -203,6 +207,45 @@ export function Configuration() {
         >
           <Plus size={14} /> Add Value
         </button>
+      </div>
+
+      {/* ── Vendor Classifications Section ───────────────────────────────── */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          boxShadow: 'var(--elevation-sm)',
+          padding: '24px',
+        }}
+      >
+        <VendorClassificationSection />
+      </div>
+
+      {/* ── Vendor Levels Section ───────────────────────────────── */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          boxShadow: 'var(--elevation-sm)',
+          padding: '24px',
+        }}
+      >
+        <VendorLevelSection />
+      </div>
+
+      {/* ── Vendor Checklist Section ───────────────────────────────── */}
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card)',
+          boxShadow: 'var(--elevation-sm)',
+          padding: '24px',
+        }}
+      >
+        <VendorChecklistSection />
       </div>
 
       {/* ── Summary KPI strip ──────────────────────────────────────────────── */}

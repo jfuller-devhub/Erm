@@ -6,6 +6,15 @@ import { generateId, MOCK_USERS } from './mockData';
 export type ProductType = 'Benefit' | 'Service';
 export type ProductStatus = 'Active' | 'Draft' | 'Retired' | 'Sunset';
 
+export interface RoadmapItem {
+  id: string;
+  name: string;
+  description: string;
+  owner: AppUser | null;
+  startDate: string;
+  endDate: string;
+}
+
 export interface ProcessAssociation {
   processId: string;
   subProcessId?: string;
@@ -33,6 +42,8 @@ export interface Product {
   roadmapPriceCompetitiveness: string;
   roadmapPerformanceMeasurement: string;
   roadmapParticipantExperience: string;
+  // ─── Roadmap items (grid) ────────────────────────────────────────────────
+  roadmapItems?: RoadmapItem[];
 }
 
 // ─── Category options ────────────────────────────────────────────────────────
@@ -94,6 +105,16 @@ function sanitizeProduct(p: any): Product {
     roadmapPriceCompetitiveness: p.roadmapPriceCompetitiveness ?? '',
     roadmapPerformanceMeasurement: p.roadmapPerformanceMeasurement ?? '',
     roadmapParticipantExperience: p.roadmapParticipantExperience ?? '',
+    roadmapItems: Array.isArray(p.roadmapItems)
+      ? p.roadmapItems.map((item: any) => ({
+          id: item.id ?? generateId(),
+          name: item.name ?? '',
+          description: item.description ?? '',
+          owner: item.owner ?? null,
+          startDate: item.startDate ?? '',
+          endDate: item.endDate ?? '',
+        }))
+      : [],
   };
 }
 

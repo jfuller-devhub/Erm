@@ -460,7 +460,7 @@ function ProcessAssociationPicker({
           textAlign: 'center',
         }}
       >
-        No processes available. Create processes first in the Process Registry.
+        No processes available. Create processes first in the Process Register.
       </div>
     );
   }
@@ -630,7 +630,7 @@ function ProductPicker({
           textAlign: 'center',
         }}
       >
-        No benefits or services available. Create them first in the Benefits or Services Registry.
+        No benefits or services available. Create them first in the Benefits or Services Register.
       </div>
     );
   }

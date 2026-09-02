@@ -104,7 +104,7 @@ export interface VendorContact {
   notes: string;
 }
 
-export type ConfigTable = 'Vendor' | 'Contract' | 'Process' | 'Control' | 'Risk' | 'Mitigation' | 'Product' | 'Assessment' | 'Contact' | 'Framework' | 'Compliance';
+export type ConfigTable = 'Vendor' | 'Contract' | 'Process' | 'Control' | 'Risk' | 'Mitigation' | 'Product' | 'Assessment' | 'Contact' | 'Framework' | 'Compliance' | 'Checklist';
 export type ConfigOptionStatus = 'Active' | 'Inactive';
 
 export interface ConfigOption {
@@ -1255,4 +1255,68 @@ export const INITIAL_CONFIG_OPTIONS: ConfigOption[] = [
   { id: 'CFG-218', table: 'Compliance', field: 'Implementation Status', value: 'in_progress',    status: 'Active', sortOrder: 2 },
   { id: 'CFG-219', table: 'Compliance', field: 'Implementation Status', value: 'implemented',    status: 'Active', sortOrder: 3 },
   { id: 'CFG-220', table: 'Compliance', field: 'Implementation Status', value: 'not_applicable', status: 'Active', sortOrder: 4 },
+
+  // ─── Regulation ──────────────────────────────────────────────────────────────
+  { id: 'CFG-221', table: 'Regulation', field: 'Regulatory Body', value: 'SEC - Securities and Exchange Commission',      status: 'Active', sortOrder: 1 },
+  { id: 'CFG-222', table: 'Regulation', field: 'Regulatory Body', value: 'FINRA - Financial Industry Regulatory Authority', status: 'Active', sortOrder: 2 },
+  { id: 'CFG-223', table: 'Regulation', field: 'Regulatory Body', value: 'FDA - Food and Drug Administration',           status: 'Active', sortOrder: 3 },
+  { id: 'CFG-224', table: 'Regulation', field: 'Regulatory Body', value: 'EPA - Environmental Protection Agency',        status: 'Active', sortOrder: 4 },
+  { id: 'CFG-225', table: 'Regulation', field: 'Regulatory Body', value: 'OSHA - Occupational Safety and Health Administration', status: 'Active', sortOrder: 5 },
+  { id: 'CFG-226', table: 'Regulation', field: 'Regulatory Body', value: 'FTC - Federal Trade Commission',              status: 'Active', sortOrder: 6 },
+  { id: 'CFG-227', table: 'Regulation', field: 'Regulatory Body', value: 'CFPB - Consumer Financial Protection Bureau',  status: 'Active', sortOrder: 7 },
+  { id: 'CFG-228', table: 'Regulation', field: 'Regulatory Body', value: 'EU Parliament',                               status: 'Active', sortOrder: 8 },
+  { id: 'CFG-229', table: 'Regulation', field: 'Regulatory Body', value: 'FCA - UK Financial Conduct Authority',        status: 'Active', sortOrder: 9 },
+  { id: 'CFG-230', table: 'Regulation', field: 'Regulatory Body', value: 'GDPR - EU Data Protection',                   status: 'Active', sortOrder: 10 },
+  { id: 'CFG-231', table: 'Regulation', field: 'Regulatory Body', value: 'CCPA - California Consumer Privacy Act',      status: 'Active', sortOrder: 11 },
+  { id: 'CFG-232', table: 'Regulation', field: 'Regulatory Body', value: 'SOX - Sarbanes-Oxley',                        status: 'Active', sortOrder: 12 },
+  { id: 'CFG-233', table: 'Regulation', field: 'Regulatory Body', value: 'HIPAA - Health Insurance Portability',        status: 'Active', sortOrder: 13 },
+  { id: 'CFG-234', table: 'Regulation', field: 'Regulatory Body', value: 'PCI DSS - Payment Card Industry',             status: 'Active', sortOrder: 14 },
+  { id: 'CFG-235', table: 'Regulation', field: 'Regulatory Body', value: 'ISO/IEC Standards Body',                      status: 'Active', sortOrder: 15 },
+  { id: 'CFG-236', table: 'Regulation', field: 'Regulatory Body', value: 'NIST - National Institute of Standards',      status: 'Active', sortOrder: 16 },
+  { id: 'CFG-237', table: 'Regulation', field: 'Regulatory Body', value: 'Internal Policy',                             status: 'Active', sortOrder: 17 },
+  { id: 'CFG-238', table: 'Regulation', field: 'Regulatory Body', value: 'Federal - USA',                               status: 'Active', sortOrder: 18 },
+
+  { id: 'CFG-239', table: 'Regulation', field: 'Jurisdiction', value: 'Federal - USA',           status: 'Active', sortOrder: 1 },
+  { id: 'CFG-240', table: 'Regulation', field: 'Jurisdiction', value: 'European Union',          status: 'Active', sortOrder: 2 },
+  { id: 'CFG-241', table: 'Regulation', field: 'Jurisdiction', value: 'United Kingdom',          status: 'Active', sortOrder: 3 },
+  { id: 'CFG-242', table: 'Regulation', field: 'Jurisdiction', value: 'California',              status: 'Active', sortOrder: 4 },
+  { id: 'CFG-243', table: 'Regulation', field: 'Jurisdiction', value: 'New York',                status: 'Active', sortOrder: 5 },
+  { id: 'CFG-244', table: 'Regulation', field: 'Jurisdiction', value: 'Texas',                   status: 'Active', sortOrder: 6 },
+  { id: 'CFG-245', table: 'Regulation', field: 'Jurisdiction', value: 'Delaware',                status: 'Active', sortOrder: 7 },
+  { id: 'CFG-246', table: 'Regulation', field: 'Jurisdiction', value: 'International',           status: 'Active', sortOrder: 8 },
+  { id: 'CFG-247', table: 'Regulation', field: 'Jurisdiction', value: 'Multi-jurisdictional',    status: 'Active', sortOrder: 9 },
+  { id: 'CFG-248', table: 'Regulation', field: 'Jurisdiction', value: 'State - Other',           status: 'Active', sortOrder: 10 },
+  { id: 'CFG-249', table: 'Regulation', field: 'Jurisdiction', value: 'Municipal',               status: 'Active', sortOrder: 11 },
+
+  { id: 'CFG-250', table: 'Regulation', field: 'Category', value: 'Financial Reporting',      status: 'Active', sortOrder: 1 },
+  { id: 'CFG-251', table: 'Regulation', field: 'Category', value: 'Data Privacy',             status: 'Active', sortOrder: 2 },
+  { id: 'CFG-252', table: 'Regulation', field: 'Category', value: 'Securities',               status: 'Active', sortOrder: 3 },
+  { id: 'CFG-253', table: 'Regulation', field: 'Category', value: 'Environmental',            status: 'Active', sortOrder: 4 },
+  { id: 'CFG-254', table: 'Regulation', field: 'Category', value: 'Health & Safety',          status: 'Active', sortOrder: 5 },
+  { id: 'CFG-255', table: 'Regulation', field: 'Category', value: 'Labor & Employment',       status: 'Active', sortOrder: 6 },
+  { id: 'CFG-256', table: 'Regulation', field: 'Category', value: 'Consumer Protection',      status: 'Active', sortOrder: 7 },
+  { id: 'CFG-257', table: 'Regulation', field: 'Category', value: 'Anti-Money Laundering',    status: 'Active', sortOrder: 8 },
+  { id: 'CFG-258', table: 'Regulation', field: 'Category', value: 'Cybersecurity',            status: 'Active', sortOrder: 9 },
+  { id: 'CFG-259', table: 'Regulation', field: 'Category', value: 'Industry-Specific',        status: 'Active', sortOrder: 10 },
+
+  { id: 'CFG-260', table: 'Regulation', field: 'Document Type', value: 'Legislation Text',       status: 'Active', sortOrder: 1 },
+  { id: 'CFG-261', table: 'Regulation', field: 'Document Type', value: 'Amendment',              status: 'Active', sortOrder: 2 },
+  { id: 'CFG-262', table: 'Regulation', field: 'Document Type', value: 'Impact Assessment',      status: 'Active', sortOrder: 3 },
+  { id: 'CFG-263', table: 'Regulation', field: 'Document Type', value: 'Legal Opinion',          status: 'Active', sortOrder: 4 },
+  { id: 'CFG-264', table: 'Regulation', field: 'Document Type', value: 'Implementation Guide',   status: 'Active', sortOrder: 5 },
+  { id: 'CFG-265', table: 'Regulation', field: 'Document Type', value: 'Gap Analysis',           status: 'Active', sortOrder: 6 },
+  { id: 'CFG-266', table: 'Regulation', field: 'Document Type', value: 'Compliance Report',      status: 'Active', sortOrder: 7 },
+  { id: 'CFG-267', table: 'Regulation', field: 'Document Type', value: 'Evidence Documentation', status: 'Active', sortOrder: 8 },
+  { id: 'CFG-268', table: 'Regulation', field: 'Document Type', value: 'Correspondence',         status: 'Active', sortOrder: 9 },
+  { id: 'CFG-269', table: 'Regulation', field: 'Document Type', value: 'Committee Report',       status: 'Active', sortOrder: 10 },
+  { id: 'CFG-270', table: 'Regulation', field: 'Document Type', value: 'Regulatory Notice',      status: 'Active', sortOrder: 11 },
+  { id: 'CFG-271', table: 'Regulation', field: 'Document Type', value: 'Other',                  status: 'Active', sortOrder: 12 },
+
+  // ─── Checklist ───────────────────────────────────────────────────────────────
+  { id: 'CFG-272', table: 'Checklist', field: 'Activity Type', value: 'Due Diligence', status: 'Active', sortOrder: 1 },
+  { id: 'CFG-273', table: 'Checklist', field: 'Activity Type', value: 'Monitoring',     status: 'Active', sortOrder: 2 },
+  { id: 'CFG-274', table: 'Checklist', field: 'Activity Type', value: 'Assessment',     status: 'Active', sortOrder: 3 },
+  { id: 'CFG-275', table: 'Checklist', field: 'Activity Type', value: 'Review',         status: 'Active', sortOrder: 4 },
+  { id: 'CFG-276', table: 'Checklist', field: 'Activity Type', value: 'Audit',          status: 'Active', sortOrder: 5 },
+  { id: 'CFG-277', table: 'Checklist', field: 'Activity Type', value: 'Verification',   status: 'Active', sortOrder: 6 },
 ];

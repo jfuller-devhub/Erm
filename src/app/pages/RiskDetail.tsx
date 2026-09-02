@@ -4,12 +4,14 @@ import {
   ArrowLeft, Edit2, Trash2, ShieldAlert, User,
   Building2, AlertTriangle, BarChart2,
 } from 'lucide-react';
+import { useApp } from '../context/AppContext';
 import { UserChip } from '../components/shared/UserPicker';
 import { RiskFormModal } from '../components/risks/RiskFormModal';
 import { RiskAssessmentSection } from '../components/risks/RiskAssessmentSection';
 import { RiskMitigationSection } from '../components/risks/RiskMitigationSection';
 import { RiskControlSection } from '../components/risks/RiskControlSection';
 import { RiskProcessesSection } from '../components/risks/RiskProcessesSection';
+import { RiskVendorsSection } from '../components/risks/RiskVendorsSection';
 import type { Risk, RiskStatus, RiskType, RiskCategory } from '../data/riskData';
 import {
   loadRisks, saveRisks, loadRiskCategories,
@@ -40,10 +42,14 @@ import type { ProcessRiskLink } from '../data/processRiskData';
 import {
   loadProcessRiskLinks, saveProcessRiskLinks,
 } from '../data/processRiskData';
+import type { VendorRisk } from '../data/vendorRiskData';
+import {
+  loadVendorRisks, saveVendorRisks, getVendorCountForRisk,
+} from '../data/vendorRiskData';
 
 // ─── Tab type ────────────────────────────────────────────────────────────────
 
-type TabKey = 'overview' | 'assessments' | 'mitigations' | 'controls' | 'processes';
+type TabKey = 'overview' | 'assessments' | 'mitigations' | 'controls' | 'processes' | 'vendors';
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 
@@ -240,6 +246,7 @@ function TabButtonBar({
 export function RiskDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { vendors } = useApp();
   const [risks, setRisks] = useState<Risk[]>([]);
   const [categories, setCategories] = useState<RiskCategory[]>([]);
   const [assessments, setAssessments] = useState<RiskAssessment[]>([]);
@@ -248,6 +255,7 @@ export function RiskDetail() {
   const [riskControls, setRiskControls] = useState<RiskControl[]>([]);
   const [processes, setProcesses] = useState<Process[]>([]);
   const [processRiskLinks, setProcessRiskLinks] = useState<ProcessRiskLink[]>([]);
+  const [vendorRisks, setVendorRisks] = useState<VendorRisk[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
@@ -261,6 +269,7 @@ export function RiskDetail() {
     setRiskControls(loadRiskControls());
     setProcesses(loadProcesses());
     setProcessRiskLinks(loadProcessRiskLinks());
+    setVendorRisks(loadVendorRisks());
   }, []);
 
   const risk = useMemo(() => risks.find(r => r.id === id), [risks, id]);
@@ -296,6 +305,11 @@ export function RiskDetail() {
   const persistProcessRiskLinks = useCallback((updated: ProcessRiskLink[]) => {
     setProcessRiskLinks(updated);
     saveProcessRiskLinks(updated);
+  }, []);
+
+  const persistVendorRisks = useCallback((updated: VendorRisk[]) => {
+    setVendorRisks(updated);
+    saveVendorRisks(updated);
   }, []);
 
   // Current assessment for header display
@@ -404,6 +418,7 @@ export function RiskDetail() {
     { key: 'mitigations', label: 'Mitigations', count: mitigationCount },
     { key: 'controls', label: 'Controls', count: controlCount },
     { key: 'processes', label: 'Processes', count: processRiskLinks.filter(l => l.riskId === id).length || undefined },
+    { key: 'vendors', label: 'Vendors', count: getVendorCountForRisk(vendorRisks, id) },
   ];
 
   return (
@@ -676,6 +691,15 @@ export function RiskDetail() {
           processes={processes}
           processLinks={processRiskLinks}
           onLinksChange={persistProcessRiskLinks}
+        />
+      )}
+
+      {activeTab === 'vendors' && (
+        <RiskVendorsSection
+          riskId={risk.id}
+          vendors={vendors}
+          vendorRisks={vendorRisks}
+          onVendorRisksChange={persistVendorRisks}
         />
       )}
 

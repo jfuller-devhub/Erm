@@ -4,14 +4,15 @@ import {
   ArrowLeft, Edit2, Trash2, Package, Heart, Briefcase, Tag,
   ArrowRight, Activity, GitBranch, Plus, ChevronDown, ChevronRight,
   Building2, X, Search, Map, CheckCircle2,
+  CalendarDays, ChevronUp, ChevronLeft, AlertTriangle,
 } from 'lucide-react';
 import { ProductFormModal } from '../components/products/ProductFormModal';
 import { RichTextEditor } from '../components/shared/RichTextEditor';
-import type { Product, ProductType, ProductStatus } from '../data/productData';
+import type { Product, ProductType, ProductStatus, RoadmapItem } from '../data/productData';
 import { loadProducts, saveProducts } from '../data/productData';
 import type { Process } from '../data/processData';
 import { loadProcesses } from '../data/processData';
-import { formatDate } from '../data/mockData';
+import { formatDate, generateId, MOCK_USERS } from '../data/mockData';
 import type { Vendor } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { syncProductVendorLinks, removeProductFromAllVendors } from '../data/syncUtils';
@@ -83,7 +84,7 @@ function ProductTypeBadge({ type }: { type: ProductType }) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Roadmap', 'Associated Processes', 'Associated Vendors'] as const;
+const TABS = ['Overview', 'Strategy', 'Roadmap Items', 'Associated Processes', 'Associated Vendors'] as const;
 type TabKey = typeof TABS[number];
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ export function ProductDetail() {
             fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
           }}
         >
-          Back to Benefits or Services Registry
+          Back to Benefits or Services Register
         </button>
       </div>
     );
@@ -183,7 +184,7 @@ export function ProductDetail() {
         }}
       >
         <ArrowLeft size={14} />
-        Back to Benefits or Services Registry
+        Back to Benefits or Services Register
       </button>
 
       {/* ─── Record Summary Header ──────────────────────────────────── */}
@@ -349,7 +350,7 @@ export function ProductDetail() {
               gap: '6px',
             }}
           >
-            {tab === 'Roadmap' && <Map size={13} />}
+            {tab === 'Strategy' && <Map size={13} />}
             {tab}
             {tab === 'Associated Processes' && resolvedAssociations.length > 0 && (
               <span
@@ -392,8 +393,12 @@ export function ProductDetail() {
         <OverviewTab product={product} />
       )}
 
-      {activeTab === 'Roadmap' && (
+      {activeTab === 'Strategy' && (
         <RoadmapTab product={product} onUpdateProduct={handleSave} />
+      )}
+
+      {activeTab === 'Roadmap Items' && (
+        <RoadmapItemsPanel product={product} onUpdateProduct={handleSave} />
       )}
 
       {activeTab === 'Associated Processes' && (
@@ -625,7 +630,7 @@ function RoadmapTab({
               lineHeight: '20px',
             }}
           >
-            Roadmap
+            Strategy
           </div>
           <div
             style={{
@@ -690,7 +695,7 @@ function RoadmapTab({
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
           >
             <Edit2 size={13} />
-            Edit Roadmap
+            Edit Strategy
           </button>
         ) : (
           /* ── Edit mode: Cancel (secondary) + Save (primary) ── */
@@ -743,7 +748,7 @@ function RoadmapTab({
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
             >
               <CheckCircle2 size={13} />
-              Save Roadmap
+              Save Strategy
             </button>
           </>
         )}
@@ -792,7 +797,7 @@ function RoadmapTab({
                   lineHeight: '20px',
                 }}
               >
-                No roadmap content yet
+                No strategy content yet
               </div>
               <div
                 style={{
@@ -805,7 +810,7 @@ function RoadmapTab({
                 }}
               >
                 Click{' '}
-                <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Edit Roadmap</strong>
+                <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Edit Strategy</strong>
                 {' '}to add strategic planning, regulatory considerations, and performance measurement details.
               </div>
             </div>
@@ -904,8 +909,8 @@ function RoadmapTab({
             lineHeight: '18px',
           }}
         >
-          You are editing the Roadmap. Use the toolbar in each field to format text, then click{' '}
-          <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Save Roadmap</strong>{' '}
+          You are editing the Strategy. Use the toolbar in each field to format text, then click{' '}
+          <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Save Strategy</strong>{' '}
           to apply or{' '}
           <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Cancel</strong>{' '}
           to discard.
@@ -996,11 +1001,570 @@ function RoadmapTab({
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
           >
             <CheckCircle2 size={13} />
-            Save Roadmap
+            Save Strategy
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Roadmap Items Panel (data grid) ─────────────────────────────────────────
+
+type RoadmapSortKey = 'name' | 'owner' | 'startDate' | 'endDate';
+
+function RoadmapGridColHeader({
+  label, sortKey, activeSort, dir, onSort, center = false,
+}: {
+  label: string;
+  sortKey?: RoadmapSortKey;
+  activeSort: RoadmapSortKey | null;
+  dir: 'asc' | 'desc';
+  onSort?: (k: RoadmapSortKey) => void;
+  center?: boolean;
+}) {
+  const isActive = sortKey && activeSort === sortKey;
+  return (
+    <th
+      onClick={() => sortKey && onSort?.(sortKey)}
+      style={{
+        padding: '0 12px',
+        height: '36px',
+        background: 'var(--muted)',
+        borderRight: '1px solid var(--border)',
+        textAlign: center ? 'center' : 'left',
+        fontFamily: 'var(--font-family-primary)',
+        fontSize: '12px',
+        fontWeight: 'var(--font-weight-semibold)',
+        color: 'var(--muted-foreground)',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+        whiteSpace: 'nowrap',
+        cursor: sortKey ? 'pointer' : 'default',
+        userSelect: 'none',
+      }}
+    >
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+        {label}
+        {sortKey && (
+          isActive
+            ? (dir === 'asc'
+                ? <ChevronUp size={11} style={{ color: 'var(--primary)' }} />
+                : <ChevronDown size={11} style={{ color: 'var(--primary)' }} />)
+            : <ChevronDown size={11} style={{ color: 'var(--muted-foreground)', opacity: 0.35 }} />
+        )}
+      </div>
+    </th>
+  );
+}
+
+function RoadmapItemModal({
+  item,
+  onSave,
+  onCancel,
+}: {
+  item: RoadmapItem | null;
+  onSave: (item: RoadmapItem) => void;
+  onCancel: () => void;
+}) {
+  const isEdit = item !== null;
+  const [name, setName] = React.useState(item?.name ?? '');
+  const [description, setDescription] = React.useState(item?.description ?? '');
+  const [ownerId, setOwnerId] = React.useState(item?.owner?.id ?? '');
+  const [startDate, setStartDate] = React.useState(item?.startDate ?? '');
+  const [endDate, setEndDate] = React.useState(item?.endDate ?? '');
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  function validate() {
+    const e: Record<string, string> = {};
+    if (!name.trim()) e.name = 'Name is required.';
+    if (!startDate) e.startDate = 'Start date is required.';
+    if (!endDate) e.endDate = 'End date is required.';
+    if (startDate && endDate && endDate < startDate) e.endDate = 'End date must be on or after start date.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  function handleSubmit() {
+    if (!validate()) return;
+    const owner = MOCK_USERS.find(u => u.id === ownerId) ?? null;
+    onSave({ id: item?.id ?? generateId(), name: name.trim(), description: description.trim(), owner, startDate, endDate });
+  }
+
+  const inp: React.CSSProperties = {
+    width: '100%', height: '36px', padding: '0 12px',
+    border: '1px solid var(--border)', borderRadius: 'var(--radius-input)',
+    background: 'var(--input-background)', color: 'var(--foreground)',
+    fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
+    fontWeight: 'var(--font-weight-regular)', outline: 'none', boxSizing: 'border-box',
+  };
+  const lbl: React.CSSProperties = {
+    display: 'block', fontFamily: 'var(--font-family-primary)',
+    fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)',
+    color: 'var(--foreground)', lineHeight: '20px', marginBottom: '6px',
+  };
+  const err: React.CSSProperties = {
+    fontFamily: 'var(--font-family-primary)', fontSize: '12px',
+    fontWeight: 'var(--font-weight-regular)', color: 'var(--destructive)',
+    lineHeight: '18px', marginTop: '4px',
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+    >
+      <div style={{
+        background: 'var(--card)', borderRadius: 'var(--radius-card)',
+        border: '1px solid var(--border)',
+        width: '100%', maxWidth: '540px',
+        display: 'flex', flexDirection: 'column', maxHeight: '92vh', overflow: 'auto',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 20px', borderBottom: '1px solid var(--border)',
+        }}>
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '18px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '26px' }}>
+            {isEdit ? 'Edit Roadmap Item' : 'Add Roadmap Item'}
+          </div>
+          <button type="button" onClick={onCancel} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Name */}
+          <div>
+            <label style={lbl}>Name <span style={{ color: 'var(--destructive)' }}>*</span></label>
+            <input
+              type="text" value={name}
+              onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: '' })); }}
+              placeholder="Enter roadmap item name…"
+              style={{ ...inp, borderColor: errors.name ? 'var(--destructive)' : undefined }}
+            />
+            {errors.name && <div style={err}>{errors.name}</div>}
+          </div>
+
+          {/* Owner — dropdown (3+ options → dropdown per Appian guidelines) */}
+          <div>
+            <label style={lbl}>Owner</label>
+            <select
+              value={ownerId}
+              onChange={e => setOwnerId(e.target.value)}
+              style={{ ...inp, cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}
+            >
+              <option value="">— Unassigned —</option>
+              {MOCK_USERS.map(u => (
+                <option key={u.id} value={u.id}>{u.name} ({u.department})</option>
+              ))}
+            </select>
+            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: '18px', marginTop: '4px' }}>
+              Select the team member responsible for this item.
+            </div>
+          </div>
+
+          {/* Start + End dates side-by-side */}
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Start Date <span style={{ color: 'var(--destructive)' }}>*</span></label>
+              <input
+                type="date" value={startDate}
+                onChange={e => { setStartDate(e.target.value); setErrors(p => ({ ...p, startDate: '' })); }}
+                style={{ ...inp, borderColor: errors.startDate ? 'var(--destructive)' : undefined }}
+              />
+              {errors.startDate && <div style={err}>{errors.startDate}</div>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>End Date <span style={{ color: 'var(--destructive)' }}>*</span></label>
+              <input
+                type="date" value={endDate}
+                onChange={e => { setEndDate(e.target.value); setErrors(p => ({ ...p, endDate: '' })); }}
+                style={{ ...inp, borderColor: errors.endDate ? 'var(--destructive)' : undefined }}
+              />
+              {errors.endDate && <div style={err}>{errors.endDate}</div>}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label style={lbl}>Description</label>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Describe the scope, goals, and expected outcomes…"
+              rows={4}
+              style={{ ...inp, height: 'auto', padding: '8px 12px', resize: 'vertical', lineHeight: '22px' }}
+            />
+            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: '18px', marginTop: '4px' }}>
+              Optional. Provide context on scope, goals, and expected outcomes.
+            </div>
+          </div>
+        </div>
+
+        {/* Footer — right-aligned per Appian guidelines */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+          <button
+            type="button" onClick={onCancel}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'background 0.1s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button" onClick={handleSubmit}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'opacity 0.1s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+          >
+            <CheckCircle2 size={13} />
+            {isEdit ? 'Save Changes' : 'Add Item'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteRoadmapItemDialog({
+  itemName, onConfirm, onCancel,
+}: { itemName: string; onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+      <div style={{ background: 'var(--card)', borderRadius: 'var(--radius-card)', border: '1px solid var(--border)', width: '100%', maxWidth: '440px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <AlertTriangle size={18} style={{ color: 'var(--destructive)', flexShrink: 0 }} />
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '18px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '26px' }}>
+            Delete Roadmap Item
+          </div>
+        </div>
+        <div style={{ padding: '20px', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-regular)', color: 'var(--foreground)', lineHeight: '22px' }}>
+          Are you sure you want to delete <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>{itemName}</strong>? This action cannot be undone.
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+          <button
+            type="button" onClick={onCancel}
+            style={{ display: 'inline-flex', alignItems: 'center', height: '36px', padding: '0 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button" onClick={onConfirm}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--destructive)', color: 'var(--destructive-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'opacity 0.1s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+          >
+            <Trash2 size={13} />
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoadmapItemsPanel({
+  product,
+  onUpdateProduct,
+}: {
+  product: Product;
+  onUpdateProduct: (updated: Product) => void;
+}) {
+  const [showModal, setShowModal] = React.useState(false);
+  const [editingItem, setEditingItem] = React.useState<RoadmapItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<RoadmapItem | null>(null);
+  const [sortKey, setSortKey] = React.useState<RoadmapSortKey>('startDate');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
+  const [page, setPage] = React.useState(1);
+  const PAGE_SIZE = 10;
+
+  const items = product.roadmapItems ?? [];
+
+  const sorted = [...items].sort((a, b) => {
+    let cmp = 0;
+    if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
+    else if (sortKey === 'owner') cmp = (a.owner?.name ?? '').localeCompare(b.owner?.name ?? '');
+    else if (sortKey === 'startDate') cmp = (a.startDate ?? '').localeCompare(b.startDate ?? '');
+    else if (sortKey === 'endDate') cmp = (a.endDate ?? '').localeCompare(b.endDate ?? '');
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  function handleSort(key: RoadmapSortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+    setPage(1);
+  }
+
+  function handleAdd() { setEditingItem(null); setShowModal(true); }
+  function handleEdit(item: RoadmapItem) { setEditingItem(item); setShowModal(true); }
+
+  function handleSave(item: RoadmapItem) {
+    const exists = items.find(x => x.id === item.id);
+    const updated = exists ? items.map(x => x.id === item.id ? item : x) : [...items, item];
+    onUpdateProduct({ ...product, roadmapItems: updated, updatedDate: new Date().toISOString() });
+    setShowModal(false);
+  }
+
+  function handleDelete(item: RoadmapItem) {
+    onUpdateProduct({ ...product, roadmapItems: items.filter(x => x.id !== item.id), updatedDate: new Date().toISOString() });
+    setDeleteTarget(null);
+  }
+
+  const todayMs = new Date().setHours(0, 0, 0, 0);
+  const colProps = { activeSort: sortKey as RoadmapSortKey | null, dir: sortDir, onSort: handleSort };
+
+  const pageBtnBase: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    height: '28px', minWidth: '28px', padding: '0 6px',
+    border: '1px solid var(--border)', borderRadius: 'var(--radius-button)',
+    background: 'transparent', color: 'var(--foreground)',
+    fontFamily: 'var(--font-family-primary)', fontSize: '12px',
+    fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Panel header — matches RoadmapTab header chrome */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: '12px', padding: '14px 20px',
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-card) var(--radius-card) 0 0', borderBottom: 'none',
+          flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <CalendarDays size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '20px' }}>
+                Roadmap Items
+              </div>
+              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)', lineHeight: '18px' }}>
+                Planned initiatives and milestones for this benefit or service.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button" onClick={handleAdd}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              height: '36px', padding: '0 14px', border: 'none',
+              borderRadius: 'var(--radius-button)', background: 'var(--primary)',
+              color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)',
+              fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)',
+              cursor: 'pointer', transition: 'opacity 0.1s', flexShrink: 0,
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+          >
+            <Plus size={13} />
+            Add Item
+          </button>
+        </div>
+
+        {/* Grid body */}
+        <div style={{
+          background: 'var(--card)', border: '1px solid var(--border)',
+          borderTop: 'none', borderRadius: '0 0 var(--radius-card) var(--radius-card)',
+          overflow: 'hidden',
+        }}>
+          {items.length === 0 ? (
+            /* Empty state — per Appian guidelines: 48px icon, SM heading, MD body, optional CTA */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 24px', gap: '12px', textAlign: 'center' }}>
+              <CalendarDays size={48} style={{ color: 'var(--muted-foreground)', opacity: 0.28 }} />
+              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '20px' }}>
+                No roadmap items yet
+              </div>
+              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)', lineHeight: '22px', maxWidth: '320px' }}>
+                Click <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Add Item</strong> to start tracking planned initiatives and milestones.
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Scrollable table */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: '600px' }}>
+                  <colgroup>
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '26%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '10%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                      <RoadmapGridColHeader label="Name"       sortKey="name"      {...colProps} />
+                      <RoadmapGridColHeader label="Description"                    {...colProps} />
+                      <RoadmapGridColHeader label="Owner"      sortKey="owner"     {...colProps} />
+                      <RoadmapGridColHeader label="Start Date" sortKey="startDate" {...colProps} />
+                      <RoadmapGridColHeader label="End Date"   sortKey="endDate"   {...colProps} />
+                      <RoadmapGridColHeader label="Actions"    center              {...colProps} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pageItems.map((item, idx) => {
+                      const endMs = item.endDate ? new Date(item.endDate + 'T00:00:00').getTime() : null;
+                      const isPastDue = endMs !== null && endMs < todayMs;
+                      const rowBg = idx % 2 === 1 ? 'var(--muted)' : 'var(--card)';
+                      const cell: React.CSSProperties = {
+                        padding: '0 12px', height: '40px', verticalAlign: 'middle',
+                        borderBottom: '1px solid var(--border)', overflow: 'hidden',
+                      };
+                      const cellText: React.CSSProperties = {
+                        fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
+                        fontWeight: 'var(--font-weight-regular)', color: 'var(--foreground)',
+                        lineHeight: '20px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      };
+                      const metaText: React.CSSProperties = {
+                        fontFamily: 'var(--font-family-primary)', fontSize: '12px',
+                        fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)',
+                        lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      };
+
+                      return (
+                        <tr key={item.id} style={{ background: rowBg }}>
+                          {/* Name — semibold, primary text per a.gridField first-column spec */}
+                          <td style={cell}>
+                            <div style={{ ...cellText, fontWeight: 'var(--font-weight-semibold)' }}>
+                              {item.name}
+                            </div>
+                          </td>
+
+                          {/* Description */}
+                          <td style={cell}>
+                            <div style={metaText}>
+                              {item.description || <span style={{ fontStyle: 'italic' }}>—</span>}
+                            </div>
+                          </td>
+
+                          {/* Owner — avatar chip + name */}
+                          <td style={cell}>
+                            {item.owner ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                                <div style={{
+                                  width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
+                                  background: 'var(--primary)', color: 'var(--primary-foreground)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontFamily: 'var(--font-family-primary)', fontSize: '10px',
+                                  fontWeight: 'var(--font-weight-semibold)',
+                                }}>
+                                  {item.owner.initials}
+                                </div>
+                                <span style={metaText}>{item.owner.name}</span>
+                              </div>
+                            ) : (
+                              <span style={{ ...metaText, fontStyle: 'italic' }}>—</span>
+                            )}
+                          </td>
+
+                          {/* Start Date */}
+                          <td style={cell}>
+                            <span style={metaText}>{formatDate(item.startDate) !== '—' ? formatDate(item.startDate) : <span style={{ fontStyle: 'italic' }}>—</span>}</span>
+                          </td>
+
+                          {/* End Date — red + semibold if past due */}
+                          <td style={cell}>
+                            <span style={{
+                              ...metaText,
+                              color: isPastDue ? 'var(--destructive)' : 'var(--muted-foreground)',
+                              fontWeight: isPastDue ? 'var(--font-weight-semibold)' : undefined,
+                            }}>
+                              {formatDate(item.endDate) !== '—' ? formatDate(item.endDate) : <span style={{ fontStyle: 'italic' }}>—</span>}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td style={{ ...cell, overflow: 'visible' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                              <button
+                                type="button" onClick={() => handleEdit(item)} title="Edit"
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--primary)', cursor: 'pointer', transition: 'background 0.1s' }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                              <button
+                                type="button" onClick={() => setDeleteTarget(item)} title="Delete"
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--destructive)', cursor: 'pointer', transition: 'background 0.1s' }}
+                                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#FDE8E8'; }}
+                                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination — per Appian guidelines when > 10 rows */}
+              {totalPages > 1 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--card)',
+                }}>
+                  <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)' }}>
+                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length}
+                  </span>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button
+                      type="button" disabled={page === 1} onClick={() => setPage(p => p - 1)}
+                      style={{ ...pageBtnBase, opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer' }}
+                    >
+                      <ChevronLeft size={13} />
+                    </button>
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                      <button
+                        key={p} type="button" onClick={() => setPage(p)}
+                        style={{
+                          ...pageBtnBase,
+                          background: page === p ? 'var(--primary)' : 'transparent',
+                          color: page === p ? 'var(--primary-foreground)' : 'var(--foreground)',
+                          borderColor: page === p ? 'var(--primary)' : 'var(--border)',
+                        }}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                    <button
+                      type="button" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
+                      style={{ ...pageBtnBase, opacity: page === totalPages ? 0.4 : 1, cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {showModal && (
+        <RoadmapItemModal item={editingItem} onSave={handleSave} onCancel={() => setShowModal(false)} />
+      )}
+      {deleteTarget && (
+        <DeleteRoadmapItemDialog
+          itemName={deleteTarget.name}
+          onConfirm={() => handleDelete(deleteTarget)}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -1167,7 +1731,7 @@ function AssociatedProcessesTab({
                   color: 'var(--muted-foreground)',
                 }}
               >
-                No processes available. Create processes in the Process Registry first.
+                No processes available. Create processes in the Process Register first.
               </div>
             ) : (
               allProcesses.map(proc => {
@@ -1853,7 +2417,7 @@ function AssociatedVendorsTab({
                   color: 'var(--muted-foreground)',
                 }}
               >
-                No vendors available. Create vendors in the Vendor Registry first.
+                No vendors available. Create vendors in the Vendor Register first.
               </div>
             ) : (
               filteredVendors.map(vendor => {

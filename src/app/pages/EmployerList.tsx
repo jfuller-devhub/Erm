@@ -365,7 +365,7 @@ export function EmployerList() {
             fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)',
             margin: 0, lineHeight: '30px',
           }}>
-            Employer Registry
+            Employer Register
           </h1>
           <p style={{
             fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',

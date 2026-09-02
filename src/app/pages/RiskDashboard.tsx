@@ -21,6 +21,7 @@ import {
   RISK_RATING_LABELS, RISK_RATING_STYLES,
 } from '../data/riskAssessmentData';
 import { formatDate, generateId } from '../data/mockData';
+import { DEPARTMENTS } from '../data/controlData';
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 

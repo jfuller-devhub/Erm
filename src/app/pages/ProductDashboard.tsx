@@ -376,7 +376,7 @@ export function ProductDashboard() {
               lineHeight: '30px',
             }}
           >
-            Benefits or Services Registry
+            Benefits or Services Register
           </h1>
           <p
             style={{
@@ -556,7 +556,7 @@ export function ProductDashboard() {
           <EmptyState
             icon={Package}
             title="No benefits or services yet"
-            description="Create your first benefit or service to start building the registry."
+            description="Create your first benefit or service to start building the register."
             action={{ label: 'New Benefit or Service', onClick: openNew }}
           />
         ) : (

@@ -166,7 +166,7 @@ function NewControlFormView({ onCreated, onBack }: NewControlFormViewProps) {
       createdAt: today,
       updatedAt: today,
     };
-    // Persist to shared control registry
+    // Persist to shared control register
     const all = loadControls();
     saveControls([...all, newCtrl]);
     onCreated(newCtrl);
@@ -511,7 +511,7 @@ function NewControlFormView({ onCreated, onBack }: NewControlFormViewProps) {
           fontFamily: 'var(--font-family-primary)', fontSize: '12px',
           fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)',
         }}>
-          The new control will be saved to the Control Registry and linked to this process.
+          The new control will be saved to the Control Register and linked to this process.
         </span>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
@@ -641,7 +641,7 @@ function LinkControlModal({
               margin: '2px 0 0 0',
             }}>
               {view === 'create'
-                ? `New control will be added to the Control Registry and linked to "${process.name}".`
+                ? `New control will be added to the Control Register and linked to "${process.name}".`
                 : `Add a direct process-level control for "${process.name}".`}
             </p>
           </div>
@@ -797,7 +797,7 @@ function LinkControlModal({
                     }}>
                       {search
                         ? `No results for "${search}". Create a new control and link it directly to this process.`
-                        : 'Create a new control and it will be added to the Control Registry and linked here.'}
+                        : 'Create a new control and it will be added to the Control Register and linked here.'}
                     </p>
                     <button
                       type="button"

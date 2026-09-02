@@ -1,6 +1,6 @@
+import React, { useState, useEffect } from 'react';
 import { FormModal, Field, TextInput, TextareaInput, SelectInput } from '../shared/FormModal';
 import { UserPickerInput } from '../shared/UserPicker';
-import { useApp } from '../../context/AppContext';
 import type { AppUser } from '../../data/mockData';
 import type {
   Risk, RiskStatus, RiskType, AppetiteLevel, ReviewFrequency, RiskCategory,
@@ -46,13 +46,6 @@ export function RiskFormModal({
   departments,
   allRisks = [],
 }: RiskFormModalProps) {
-  const { getActiveOptions } = useApp();
-  const riskStatuses     = getActiveOptions('Risk', 'Status');
-  const riskTypes        = getActiveOptions('Risk', 'Type');
-  const appetiteLevels   = getActiveOptions('Risk', 'Appetite Level');
-  const reviewFreqs      = getActiveOptions('Risk', 'Review Frequency');
-  const deptOptions      = getActiveOptions('Risk', 'Department');
-
   const [form, setForm] = useState({ ...EMPTY });
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -170,7 +163,7 @@ export function RiskFormModal({
               hasError={!!errors.department}
             >
               <option value="">Select department...</option>
-              {deptOptions.map(d => (
+              {departments.map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </SelectInput>
@@ -194,7 +187,7 @@ export function RiskFormModal({
               onChange={e => set('status', e.target.value as RiskStatus)}
               hasError={!!errors.status}
             >
-              {riskStatuses.map(s => (
+              {Object.keys(RISK_STATUS_LABELS).map(s => (
                 <option key={s} value={s}>{RISK_STATUS_LABELS[s as RiskStatus] ?? s}</option>
               ))}
             </SelectInput>
@@ -206,7 +199,7 @@ export function RiskFormModal({
               onChange={e => set('riskType', e.target.value as RiskType)}
               hasError={!!errors.riskType}
             >
-              {riskTypes.map(t => (
+              {Object.keys(RISK_TYPE_LABELS).map(t => (
                 <option key={t} value={t}>{RISK_TYPE_LABELS[t as RiskType] ?? t}</option>
               ))}
             </SelectInput>
@@ -221,7 +214,7 @@ export function RiskFormModal({
               onChange={e => set('appetiteLevel', e.target.value as AppetiteLevel)}
               hasError={!!errors.appetiteLevel}
             >
-              {appetiteLevels.map(a => (
+              {Object.keys(APPETITE_LEVEL_LABELS).map(a => (
                 <option key={a} value={a}>{APPETITE_LEVEL_LABELS[a as AppetiteLevel] ?? a}</option>
               ))}
             </SelectInput>
@@ -233,7 +226,7 @@ export function RiskFormModal({
               onChange={e => set('reviewFrequency', e.target.value as ReviewFrequency)}
               hasError={!!errors.reviewFrequency}
             >
-              {reviewFreqs.map(f => (
+              {Object.keys(REVIEW_FREQUENCY_LABELS).map(f => (
                 <option key={f} value={f}>{REVIEW_FREQUENCY_LABELS[f as ReviewFrequency] ?? f}</option>
               ))}
             </SelectInput>

@@ -180,7 +180,7 @@ export function ProcessDetail() {
             fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
           }}
         >
-          Back to Process Registry
+          Back to Process Register
         </button>
       </div>
     );
@@ -212,7 +212,7 @@ export function ProcessDetail() {
         }}
       >
         <ArrowLeft size={14} />
-        Back to Process Registry
+        Back to Process Register
       </button>
 
       {/* ─── Record Summary Header (Appian guideline) ───────────────────── */}
@@ -1801,7 +1801,7 @@ function ProductsTab({ process }: { process: Process }) {
             margin: 0,
           }}
         >
-          Benefits or services can be linked to this process from the Benefits or Services Registry.
+          Benefits or services can be linked to this process from the Benefits or Services Register.
         </p>
       </div>
     );
@@ -2064,7 +2064,7 @@ function VendorsTab({ process }: { process: Process }) {
                   color: 'var(--muted-foreground)',
                 }}
               >
-                No vendors available. Create vendors in the Vendor Registry first.
+                No vendors available. Create vendors in the Vendor Register first.
               </div>
             ) : (
               vendors.map(vendor => {

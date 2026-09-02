@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Plus, Search, X, ShieldCheck, CheckCircle2,
   AlertTriangle, Clock, Zap,
@@ -96,7 +96,7 @@ function EffectivenessBadge({ effectiveness }: { effectiveness: ControlEffective
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function ControlRegistry() {
+export function ControlRegister() {
   const navigate = useNavigate();
   const { getActiveOptions } = useApp();
   const controlStatusOpts = getActiveOptions('Control', 'Status');
@@ -314,7 +314,7 @@ export function ControlRegistry() {
               lineHeight: '30px',
             }}
           >
-            Control Registry
+            Control Register
           </h1>
           <p
             style={{

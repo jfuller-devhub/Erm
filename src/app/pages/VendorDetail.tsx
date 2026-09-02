@@ -10,13 +10,18 @@ import { ContractFormModal } from '../components/shared/ContractFormModal';
 import { ContactFormModal } from '../components/shared/ContactFormModal';
 import { FormModal } from '../components/shared/FormModal';
 import { UserChip } from '../components/shared/UserPicker';
+import { VendorRisksTab } from '../components/vendors/VendorRisksTab';
 import { formatDate, formatCurrency, Contract, VendorContact } from '../data/mockData';
 import { loadProcesses } from '../data/processData';
 import { loadProducts } from '../data/productData';
 import type { Product } from '../data/productData';
 import { syncVendorProductLinks } from '../data/syncUtils';
+import { loadRisks } from '../data/riskData';
+import type { Risk } from '../data/riskData';
+import { loadVendorRisks, saveVendorRisks, getRiskCountForVendor } from '../data/vendorRiskData';
+import type { VendorRisk } from '../data/vendorRiskData';
 
-const TABS = ['Details', 'Contacts', 'Contracts', 'Processes', 'Benefits or Services', 'Activity'] as const;
+const TABS = ['Details', 'Contacts', 'Contracts', 'Processes', 'Benefits or Services', 'Risks', 'Activity'] as const;
 type Tab = typeof TABS[number];
 
 export function VendorDetail() {
@@ -35,6 +40,8 @@ export function VendorDetail() {
   const [showAddContract, setShowAddContract] = useState(false);
   const [linkedProducts, setLinkedProducts] = useState<Product[]>([]);
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [risks, setRisks] = useState<Risk[]>([]);
+  const [vendorRisks, setVendorRisks] = useState<VendorRisk[]>([]);
 
   // Contact modal state
   const [showContactModal, setShowContactModal] = useState(false);
@@ -49,6 +56,12 @@ export function VendorDetail() {
     setAllProducts(all);
     setLinkedProducts(all.filter(p => (vendor.productIds ?? []).includes(p.id)));
   }, [vendor?.productIds?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load risks and vendor-risk links
+  useEffect(() => {
+    setRisks(loadRisks());
+    setVendorRisks(loadVendorRisks());
+  }, []);
 
   if (!vendor) {
     return (
@@ -869,6 +882,19 @@ export function VendorDetail() {
             />
           )}
 
+          {/* ── Risks Tab ────────────────────────────────────────────── */}
+          {activeTab === 'Risks' && (
+            <VendorRisksTab
+              vendorId={vendor.id}
+              risks={risks}
+              vendorRisks={vendorRisks}
+              onVendorRisksChange={(updated) => {
+                setVendorRisks(updated);
+                saveVendorRisks(updated);
+              }}
+            />
+          )}
+
           {/* ── Activity Tab ─────────────────────────────────────────── */}
           {activeTab === 'Activity' && (
             <div style={{ padding: '8px 0' }}>
@@ -1529,7 +1555,7 @@ function VendorProcessesTab({ vendor, navigate, onUpdateVendor }: { vendor: impo
                   color: 'var(--muted-foreground)',
                 }}
               >
-                No processes available. Create processes in the Process Registry first.
+                No processes available. Create processes in the Process Register first.
               </div>
             ) : (
               allProcesses.map(proc => {
@@ -2203,7 +2229,7 @@ function VendorProductsTab({
                 }}
               >
                 {allProducts.length === 0
-                  ? 'No benefits or services available. Create them in the Benefits or Services Registry first.'
+                  ? 'No benefits or services available. Create them in the Benefits or Services Register first.'
                   : 'No benefits or services match your search.'}
               </div>
             ) : (
@@ -2347,7 +2373,7 @@ function VendorProductsTab({
               color: 'var(--muted-foreground)',
             }}
           >
-            Associate this vendor with one or more benefits or services from the registry.
+            Associate this vendor with one or more benefits or services from the register.
           </div>
           <button
             onClick={() => setShowPicker(true)}

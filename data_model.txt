@@ -1,1129 +1,1252 @@
--- ============================================================
---  Enterprise Risk Management (ERM) — Relational Data Model
---  Generated : 2026-02-25
---  Dialect   : MariaDB 10.6+ (InnoDB)
---
---  Naming Conventions
---  ─────────────────────────────────────────────────────────
---  • All table names carry the prefix ERM_ and are ALL_CAPS
---    with underscores (e.g. ERM_VENDOR, ERM_APP_USER).
---  • All column names are ALL_CAPS with underscores
---    (e.g. FIRST_NAME, LAST_NAME).
---  • Table names are singular (e.g. ERM_VENDOR not ERM_VENDORS).
---  • Abbreviations are avoided unless universally understood
---    or DMBA-accepted (e.g. DMBA, BAA, AI, KRI are accepted).
---  • The Primary Key of every table is named TABLE_NAME_ID
---    (e.g. ERM_VENDOR.VENDOR_ID, ERM_APP_USER.APP_USER_ID).
---  • Foreign Key columns use the PK name of the referenced
---    table.  When multiple FKs reference the same table a
---    role qualifier is prepended
---    (e.g. ASSIGNED_TO_APP_USER_ID, REVIEWER_APP_USER_ID).
---  • All Primary Keys are INT NOT NULL AUTO_INCREMENT.
---  • Every table carries a human-readable CODE column that
---    maps to the application's string identifiers
---    (e.g. 'VEN-001', 'CON-001').  These are UNIQUE but are
---    NOT the PK; the integer PK is used for all FK references.
---  • Enumerated columns are typed VARCHAR(n) with a comment
---    of the form  -- enum: <domain_name>  that references the
---    allowed-values list in Section 1.  No inline ENUM(…)
---    literals appear in the CREATE TABLE statements.
---  • VARCHAR widths are sized to the longest allowed value in
---    the referenced domain plus a small buffer.
---  • Timestamps use DATETIME; date-only values use DATE.
---    CREATED_AT columns default to CURRENT_TIMESTAMP.
---    UPDATED_AT columns carry ON UPDATE CURRENT_TIMESTAMP so
---    MariaDB refreshes them automatically on every UPDATE.
---  • DECIMAL(p,s) is used for all fixed-precision numerics.
---  • TINYINT is used for small integer scores (1-5 scale).
---  • CHECK constraints require MariaDB 10.2.1+.
---  • SET FOREIGN_KEY_CHECKS = 0 allows forward references
---    between tables in any creation order.
---  • Every table uses ENGINE=InnoDB DEFAULT CHARSET=utf8mb3
---    COLLATE=utf8mb3_unicode_ci.
---  • Column descriptions are stored in COMMENT clauses so
---    they are visible via SHOW FULL COLUMNS and information_schema.
---  • ON DELETE behaviour:
---      CASCADE  — child rows are removed with the parent.
---      RESTRICT — parent cannot be deleted while children exist.
---      SET NULL — FK column is nulled when the parent is deleted.
--- ============================================================
-
-SET FOREIGN_KEY_CHECKS = 0;
-SET NAMES utf8mb3;
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 1 — ENUM DOMAIN REFERENCE
---  Allowed values for every enumerated column.
---  Column definitions reference these domains via comments.
--- ════════════════════════════════════════════════════════════
---
---  ERM_VENDOR.STATUS
---      'Active' | 'Inactive' | 'Pending Review'
---      | 'Terminating' | 'Selected Vendor'
---
---  ERM_VENDOR.CATEGORY
---      'Business Services' | 'Facility Services'
---      | 'Software/Hardware/Technology' | 'Events' | 'Other'
---
---  ERM_VENDOR_CONTACT.TYPE
---      'External' | 'Internal'
---
---  ERM_CONTRACT.STATUS
---      'Active' | 'Expired' | 'Pending' | 'Renewal Due' | 'Terminated'
---
---  ERM_CONTRACT.TYPE
---      'Master Service Agreement' | 'Statement of Work'
---      | 'NDA' | 'Amendment' | 'Purchase Order'
---
---  ERM_PRODUCT.TYPE
---      'Benefit' | 'Service'
---
---  ERM_PRODUCT.STATUS
---      'Active' | 'Draft' | 'Retired' | 'Sunset'
---
---  ERM_PROCESS.STATUS
---      'Draft' | 'Active' | 'Retired'
---
---  ERM_STEP.TYPE
---      'Task' | 'Decision' | 'Hand-off'
---
---  ERM_RISK.STATUS
---      'draft' | 'active' | 'closed' | 'archived'
---
---  ERM_RISK.RISK_TYPE
---      'strategic' | 'operational' | 'financial'
---      | 'compliance' | 'reputational' | 'cyber'
---
---  ERM_RISK.APPETITE_LEVEL
---      'averse' | 'minimal' | 'cautious' | 'open' | 'hungry'
---
---  ERM_RISK.REVIEW_FREQUENCY
---      'monthly' | 'quarterly' | 'semi_annual' | 'annual'
---
---  ERM_RISK_ASSESSMENT.ASSESSMENT_TYPE
---      'periodic' | 'triggered' | 'ad_hoc'
---
---  ERM_RISK_ASSESSMENT.RISK_RATING
---      'critical' (score 20-25) | 'high' (12-19) | 'medium' (6-11)
---      | 'low' (3-5) | 'negligible' (1-2)
---
---  ERM_RISK_MITIGATION_ACTION.ACTION_TYPE
---      'mitigate' | 'accept' | 'transfer' | 'avoid'
---
---  ERM_RISK_MITIGATION_ACTION.STATUS
---      'open' | 'in_progress' | 'complete' | 'deferred' | 'cancelled'
---
---  ERM_RISK_MITIGATION_ACTION.PRIORITY
---      'critical' | 'high' | 'medium' | 'low'
---
---  ERM_CONTROL.CONTROL_TYPE
---      'preventive' | 'detective' | 'corrective'
---      | 'directive' | 'compensating'
---
---  ERM_CONTROL.FREQUENCY
---      'continuous' | 'daily' | 'weekly'
---      | 'monthly' | 'quarterly' | 'annual'
---
---  ERM_CONTROL.EFFECTIVENESS
---      'effective' | 'partially_effective'
---      | 'ineffective' | 'not_tested'
---
---  ERM_CONTROL.STATUS
---      'active' | 'inactive' | 'in_design' | 'deprecated'
---
---  ERM_COMPLIANCE_FRAMEWORK.STATUS
---      'active' | 'sunset' | 'draft'
---
---  ERM_CONTROL_REQUIREMENT_MAPPING.IMPLEMENTATION_STATUS
---      'not_started' | 'in_progress' | 'implemented' | 'not_applicable'
---
---  ERM_RISK_CONTROL.COVERAGE_LEVEL
---      'full' | 'substantial' | 'partial' | 'minimal'
---
---  ERM_KRI.STATUS
---      'green' | 'amber' | 'red' | 'no_data'
---
---  ERM_KRI.THRESHOLD_DIRECTION
---      'lower_is_better' | 'higher_is_better'
---
---  ERM_KRI.CALCULATION_SOURCE
---      'auto_overdue_control_tests' | 'auto_ineffective_controls'
---      | 'auto_open_high_critical_risks' | 'auto_overdue_risk_reviews'
---      | 'auto_unmitigated_risks' | 'auto_control_coverage' | 'manual'
---
---  ERM_ACTIVITY_ITEM.ENTITY_TYPE
---      'vendor' | 'contract'
---
---  ERM_CONFIG_OPTION.TABLE_NAME
---      'Vendor' | 'Contract'
---
---  ERM_CONFIG_OPTION.STATUS
---      'Active' | 'Inactive'
---
---  ERM_PROCESS_CONTROL_LINK.TESTING_FREQUENCY
---      'Continuous' | 'Daily' | 'Weekly' | 'Monthly'
---      | 'Quarterly' | 'Annual' | 'Ad-hoc'
---
---  ERM_EMPLOYER_RELATIONSHIP.RELATIONSHIP_TYPE
---      'Affiliate' | 'Subsidiary' | 'Non-Related Entity'
---      | 'Department' | 'Other' | 'Funding Entity'
---
--- ════════════════════════════════════════════════════════════
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 2 — FOUNDATION
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_APP_USER ──────────────────────────────────────────────
--- Internal users referenced as owners, reviewers, and assignees
--- throughout the application.
--- APP is a DMBA-accepted abbreviation for Application.
-
-CREATE TABLE ERM_APP_USER (
-  APP_USER_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE         VARCHAR(20)  NOT NULL                           COMMENT 'Human-readable application identifier, e.g. USR-001; unique across all users',
-  NAME         VARCHAR(255) NOT NULL                           COMMENT 'Full display name of the application user as shown throughout the UI',
-  INITIALS     VARCHAR(5)   NOT NULL                           COMMENT 'Short initials (up to 5 characters) used in activity feeds and avatar badges',
-  DEPARTMENT   VARCHAR(100) NOT NULL                           COMMENT 'Organisational department the user belongs to, used for filtering and assignment',
-  UNIQUE KEY uq_app_user_code (CODE)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Internal application users referenced as owners, reviewers, and assignees across all ERM domains';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 3 — VENDOR & CONTRACT MANAGEMENT
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_VENDOR ───────────────────────────────────────────────
--- Core third-party organisation record.
--- In-memory state via AppContext (INITIAL_VENDORS seed).
--- DMBA is a DMBA-accepted abbreviation.
--- BAA (Business Associate Agreement) is a DMBA-accepted abbreviation.
-
-CREATE TABLE ERM_VENDOR (
-  VENDOR_ID                        INT           NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                             VARCHAR(20)   NOT NULL                            COMMENT 'Human-readable identifier, e.g. VEN-001; unique across all vendors',
-  NAME                             VARCHAR(255)  NOT NULL                            COMMENT 'Legal or trading name of the vendor organisation',
-  CATEGORY                         VARCHAR(35)   NOT NULL                            COMMENT 'Classification grouping for the vendor; see enum: vendor_category',             -- enum: vendor_category
-  STATUS                           VARCHAR(20)   NOT NULL DEFAULT 'Active'           COMMENT 'Lifecycle status of the vendor relationship; see enum: vendor_status',          -- enum: vendor_status
-  DEPARTMENT                       VARCHAR(100)  NULL                                COMMENT 'Internal department that initiated or manages this vendor relationship',
-  PRIMARY_CONTACT                  VARCHAR(255)  NULL                                COMMENT 'Full name of the primary point of contact at the vendor organisation',
-  EMAIL                            VARCHAR(255)  NULL                                COMMENT 'Primary email address for vendor correspondence',
-  PHONE                            VARCHAR(50)   NULL                                COMMENT 'Primary phone number for contacting the vendor',
-  ADDRESS                          TEXT          NULL                                COMMENT 'Registered or trading address of the vendor organisation',
-  TAX_ID                           VARCHAR(50)   NULL                                COMMENT 'Tax identification number (EIN, VAT, ABN, etc.) for the vendor',
-  WEBSITE                          VARCHAR(255)  NULL                                COMMENT 'Public website URL for the vendor organisation',
-  NOTES                            TEXT          NULL                                COMMENT 'Free-text notes and supplementary information about the vendor',
-  DMBA_VENDOR_MANAGER_APP_USER_ID  INT           NULL                                COMMENT 'Internal DMBA staff member responsible for managing this vendor relationship; FK to ERM_APP_USER',
-  DEPARTMENT_OWNER                 VARCHAR(100)  NULL                                COMMENT 'Internal department that owns accountability for this vendor',
-  DOCUMENTATION_LINK               TEXT          NULL                                COMMENT 'URL to supporting documentation such as a SharePoint folder or contract repository',
-  BAA_REQUIRED                     BOOLEAN       NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether a Business Associate Agreement is required for this vendor',
-  CREATED_DATE                     DATE          NULL                                COMMENT 'Calendar date on which the vendor record was first created in the system',
-  UPDATED_DATE                     DATE          NULL                                COMMENT 'Calendar date on which the vendor record was most recently modified',
-  UNIQUE KEY uq_vendor_code (CODE),
-  CONSTRAINT fk_vendor_manager
-    FOREIGN KEY (DMBA_VENDOR_MANAGER_APP_USER_ID)
-    REFERENCES ERM_APP_USER (APP_USER_ID)
-    ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Core third-party vendor organisation records including contact details, status, and ownership';
-
--- ── ERM_VENDOR_INDIVIDUAL ─────────────────────────────────────
--- Junction: users named on a vendor record (individualsInvolved).
-
-CREATE TABLE ERM_VENDOR_INDIVIDUAL (
-  VENDOR_INDIVIDUAL_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the junction row',
-  VENDOR_ID             INT NOT NULL                           COMMENT 'Reference to the vendor this user is associated with; FK to ERM_VENDOR',
-  APP_USER_ID           INT NOT NULL                           COMMENT 'Reference to the internal user named on the vendor record; FK to ERM_APP_USER',
-  UNIQUE KEY uq_vendor_individual (VENDOR_ID, APP_USER_ID),
-  CONSTRAINT fk_vi_vendor
-    FOREIGN KEY (VENDOR_ID)   REFERENCES ERM_VENDOR   (VENDOR_ID)   ON DELETE CASCADE,
-  CONSTRAINT fk_vi_app_user
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table linking internal users to vendor records they are involved with';
-
--- ── ERM_VENDOR_PROCESS_ASSOCIATION ────────────────────────────
--- Junction: processes (and optionally sub-processes) linked to
--- a vendor (Vendor.processAssociations[]).
-
-CREATE TABLE ERM_VENDOR_PROCESS_ASSOCIATION (
-  VENDOR_PROCESS_ASSOCIATION_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the junction row',
-  VENDOR_ID                      INT NOT NULL                           COMMENT 'Reference to the vendor involved in the process; FK to ERM_VENDOR',
-  PROCESS_ID                     INT NOT NULL                           COMMENT 'Reference to the top-level business process linked to this vendor; FK to ERM_PROCESS',
-  SUBPROCESS_ID                  INT NULL                               COMMENT 'Optional reference to the specific sub-process within the linked process; FK to ERM_SUBPROCESS',
-  UNIQUE KEY uq_vendor_process (VENDOR_ID, PROCESS_ID),
-  CONSTRAINT fk_vpa_vendor
-    FOREIGN KEY (VENDOR_ID)     REFERENCES ERM_VENDOR     (VENDOR_ID)     ON DELETE CASCADE,
-  CONSTRAINT fk_vpa_process
-    FOREIGN KEY (PROCESS_ID)    REFERENCES ERM_PROCESS    (PROCESS_ID)    ON DELETE CASCADE,
-  CONSTRAINT fk_vpa_subprocess
-    FOREIGN KEY (SUBPROCESS_ID) REFERENCES ERM_SUBPROCESS (SUBPROCESS_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table associating vendors with the business processes and sub-processes they support';
-
--- ── ERM_VENDOR_CONTACT ────────────────────────────────────────
--- Named contacts (internal or external) associated with a vendor.
-
-CREATE TABLE ERM_VENDOR_CONTACT (
-  VENDOR_CONTACT_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the contact record',
-  CODE               VARCHAR(20)  NOT NULL                           COMMENT 'Human-readable identifier, e.g. VCT-001; unique across all vendor contacts',
-  VENDOR_ID          INT          NOT NULL                           COMMENT 'Reference to the vendor this contact belongs to; FK to ERM_VENDOR',
-  NAME               VARCHAR(255) NOT NULL                           COMMENT 'Full name of the contact person',
-  TITLE              VARCHAR(255) NULL                               COMMENT 'Job title or role of the contact person at their organisation',
-  EMAIL              VARCHAR(255) NULL                               COMMENT 'Email address for this specific contact',
-  PHONE              VARCHAR(50)  NULL                               COMMENT 'Phone number for this specific contact',
-  TYPE               VARCHAR(10)  NOT NULL DEFAULT 'External'        COMMENT 'Indicates whether the contact is External (vendor-side) or Internal (our organisation); see enum: contact_type', -- enum: contact_type
-  DEPARTMENT         VARCHAR(100) NULL                               COMMENT 'Department or business unit the contact belongs to',
-  NOTES              TEXT         NULL                               COMMENT 'Free-text notes about this contact, such as preferred communication method or availability',
-  UNIQUE KEY uq_vendor_contact_code (CODE),
-  CONSTRAINT fk_vc_vendor
-    FOREIGN KEY (VENDOR_ID) REFERENCES ERM_VENDOR (VENDOR_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Named contacts (internal or external) associated with a vendor, used for correspondence and escalation';
-
--- ── ERM_CONTRACT ─────────────────────────────────────────────
--- Legal agreements between the organisation and a vendor.
--- In-memory state via AppContext (INITIAL_CONTRACTS seed).
--- AI is a universally understood abbreviation.
-
-CREATE TABLE ERM_CONTRACT (
-  CONTRACT_ID                   INT           NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                          VARCHAR(20)   NOT NULL                            COMMENT 'Human-readable identifier, e.g. CON-001; unique across all contracts',
-  VENDOR_ID                     INT           NOT NULL                            COMMENT 'Reference to the vendor party to this contract; FK to ERM_VENDOR',
-  TITLE                         VARCHAR(500)  NOT NULL                            COMMENT 'Full descriptive title of the contract as it appears on the legal document',
-  TYPE                          VARCHAR(30)   NOT NULL                            COMMENT 'Legal instrument type (MSA, SOW, NDA, Amendment, Purchase Order); see enum: contract_type',       -- enum: contract_type
-  STATUS                        VARCHAR(20)   NOT NULL DEFAULT 'Pending'          COMMENT 'Lifecycle status of the contract (Active, Expired, Pending, Renewal Due, Terminated); see enum: contract_status', -- enum: contract_status
-  VALUE                         DECIMAL(15,2) NOT NULL DEFAULT 0.00               COMMENT 'Total monetary value of the contract in the organisation base currency',
-  START_DATE                    DATE          NULL                                COMMENT 'Date on which the contract becomes or became effective',
-  END_DATE                      DATE          NULL                                COMMENT 'Date on which the contract expires or is due to expire; NULL for evergreen contracts',
-  OWNER                         VARCHAR(255)  NULL                                COMMENT 'Internal staff member or role responsible for day-to-day contract management',
-  DEPARTMENT                    VARCHAR(100)  NULL                                COMMENT 'Internal department that owns accountability for this contract',
-  DESCRIPTION                   TEXT          NULL                                COMMENT 'Plain-language summary of the contract scope, deliverables, and key terms',
-  AUTO_RENEW                    BOOLEAN       NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether the contract automatically renews at expiry unless cancelled',
-  NOTICE_PERIOD_DAYS            INT           NULL                                COMMENT 'Number of calendar days advance notice required to cancel or not renew the contract',
-  SHAREPOINT_LINK               TEXT          NULL                                COMMENT 'URL to the contract document or folder in SharePoint or another document repository',
-  VENDOR_COMMUNICATIONS_DIRECT  BOOLEAN       NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether vendor communications bypass the internal contract owner and go direct',
-  HAS_AI_FEATURES               BOOLEAN       NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether the contracted product or service incorporates AI functionality',
-  EVERGREEN                     BOOLEAN       NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether the contract has no fixed end date and continues until explicitly terminated',
-  BUDGET_MANAGER                VARCHAR(255)  NULL                                COMMENT 'Name or identifier of the person responsible for the budget line funding this contract',
-  VENDOR_SIGNATORY              VARCHAR(255)  NULL                                COMMENT 'Name of the individual who signed the contract on behalf of the vendor',
-  COMPANY_SIGNATORY             VARCHAR(255)  NULL                                COMMENT 'Name of the individual who signed the contract on behalf of our organisation',
-  CREATED_DATE                  DATE          NULL                                COMMENT 'Calendar date on which the contract record was first created in the system',
-  UPDATED_DATE                  DATE          NULL                                COMMENT 'Calendar date on which the contract record was most recently modified',
-  UNIQUE KEY uq_contract_code (CODE),
-  CONSTRAINT fk_contract_vendor
-    FOREIGN KEY (VENDOR_ID) REFERENCES ERM_VENDOR (VENDOR_ID) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Legal agreements between the organisation and its vendors, including value, dates, and ownership';
-
--- ── ERM_CONTRACT_BUSINESS_OWNER ───────────────────────────────
--- Junction: users designated as business owners of a contract.
-
-CREATE TABLE ERM_CONTRACT_BUSINESS_OWNER (
-  CONTRACT_BUSINESS_OWNER_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the junction row',
-  CONTRACT_ID                 INT NOT NULL                           COMMENT 'Reference to the contract being owned; FK to ERM_CONTRACT',
-  APP_USER_ID                 INT NOT NULL                           COMMENT 'Reference to the internal user designated as a business owner; FK to ERM_APP_USER',
-  UNIQUE KEY uq_contract_business_owner (CONTRACT_ID, APP_USER_ID),
-  CONSTRAINT fk_cbo_contract
-    FOREIGN KEY (CONTRACT_ID) REFERENCES ERM_CONTRACT  (CONTRACT_ID)  ON DELETE CASCADE,
-  CONSTRAINT fk_cbo_app_user
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER  (APP_USER_ID)  ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table designating internal users as business owners for a contract; supports multiple owners per contract';
-
--- ── ERM_CONTRACT_INDIVIDUAL ───────────────────────────────────
--- Junction: users involved in a contract (individualsInvolved).
-
-CREATE TABLE ERM_CONTRACT_INDIVIDUAL (
-  CONTRACT_INDIVIDUAL_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the junction row',
-  CONTRACT_ID             INT NOT NULL                           COMMENT 'Reference to the contract the user is involved with; FK to ERM_CONTRACT',
-  APP_USER_ID             INT NOT NULL                           COMMENT 'Reference to the internal user named as involved in the contract; FK to ERM_APP_USER',
-  UNIQUE KEY uq_contract_individual (CONTRACT_ID, APP_USER_ID),
-  CONSTRAINT fk_ci_contract
-    FOREIGN KEY (CONTRACT_ID) REFERENCES ERM_CONTRACT  (CONTRACT_ID)  ON DELETE CASCADE,
-  CONSTRAINT fk_ci_app_user
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER  (APP_USER_ID)  ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table listing internal users who are named participants or stakeholders on a contract';
-
--- ── ERM_ACTIVITY_ITEM ─────────────────────────────────────────
--- Audit-trail / activity feed for vendor and contract events.
--- ENTITY_CODE is a soft string reference (ERM_VENDOR.CODE or
--- ERM_CONTRACT.CODE) so a single feed spans both entity types
--- without a polymorphic FK.
-
-CREATE TABLE ERM_ACTIVITY_ITEM (
-  ACTIVITY_ITEM_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the activity record',
-  CODE              VARCHAR(20)  NOT NULL                           COMMENT 'Human-readable identifier for this activity entry; unique across all activity items',
-  ENTITY_CODE       VARCHAR(20)  NOT NULL                           COMMENT 'Soft string reference to the parent record (e.g. VEN-001 or CON-001); no FK enforced to allow cross-entity feed',
-  ENTITY_TYPE       VARCHAR(10)  NOT NULL                           COMMENT 'Discriminator identifying the type of parent entity (vendor or contract); see enum: activity_entity_type', -- enum: activity_entity_type
-  USER_NAME         VARCHAR(255) NOT NULL                           COMMENT 'Denormalised display name of the user who performed the action, captured at the time of the event',
-  USER_INITIALS     VARCHAR(5)   NOT NULL                           COMMENT 'Denormalised initials of the user who performed the action, used for avatar display in feeds',
-  ACTION            TEXT         NOT NULL                           COMMENT 'Human-readable description of the action taken, e.g. "Updated contract status to Active"',
-  CREATED_AT        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Timestamp at which the activity event was recorded; set automatically on insert',
-  UNIQUE KEY uq_activity_item_code (CODE),
-  KEY idx_activity_entity (ENTITY_CODE, ENTITY_TYPE)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Audit trail and activity feed entries for vendor and contract lifecycle events';
-
--- ── ERM_CONFIG_OPTION ─────────────────────────────────────────
--- User-configurable dropdown values for Vendor and Contract fields.
--- In-memory state via AppContext (INITIAL_CONFIG_OPTIONS seed).
-
-CREATE TABLE ERM_CONFIG_OPTION (
-  CONFIG_OPTION_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the configuration option',
-  TABLE_NAME        VARCHAR(10)  NOT NULL                           COMMENT 'The domain entity this option applies to (Vendor or Contract); see enum: config_table_name',    -- enum: config_table_name
-  FIELD_NAME        VARCHAR(100) NOT NULL                           COMMENT 'The specific field within the entity that this option populates, e.g. CATEGORY or DEPARTMENT',
-  VALUE             VARCHAR(255) NOT NULL                           COMMENT 'The selectable value displayed to users in the dropdown for this field',
-  STATUS            VARCHAR(10)  NOT NULL DEFAULT 'Active'          COMMENT 'Whether this option is available for selection (Active) or hidden from users (Inactive); see enum: config_option_status', -- enum: config_option_status
-  SORT_ORDER        INT          NOT NULL DEFAULT 0                 COMMENT 'Numeric position controlling the display order of this option within its field dropdown',
-  UNIQUE KEY uq_config_option (TABLE_NAME, FIELD_NAME, VALUE)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='User-configurable dropdown values that populate selectable options for Vendor and Contract fields';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 4 — PRODUCT & PROCESS REGISTRY
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_PRODUCT ───────────────────────────────────────────────
--- Benefits and services managed by the organisation.
--- localStorage key: 'erm_products'
-
-CREATE TABLE ERM_PRODUCT (
-  PRODUCT_ID            INT           NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                  VARCHAR(20)   NOT NULL                            COMMENT 'Human-readable identifier, e.g. PRD-001; unique across all products',
-  NAME                  VARCHAR(255)  NOT NULL                            COMMENT 'Display name of the product, benefit, or service',
-  TYPE                  VARCHAR(10)   NOT NULL                            COMMENT 'High-level classification of the product (Benefit or Service); see enum: product_type',  -- enum: product_type
-  CATEGORY              VARCHAR(100)  NOT NULL                            COMMENT 'Functional or market category grouping this product belongs to',
-  DESCRIPTION           TEXT          NULL                                COMMENT 'Plain-language description of what the product or service provides to members or stakeholders',
-  STATUS                VARCHAR(10)   NOT NULL DEFAULT 'Active'           COMMENT 'Publication lifecycle state of the product (Active, Draft, Retired, Sunset); see enum: product_status', -- enum: product_status
-  APP_USER_ID           INT           NULL                                COMMENT 'Internal user accountable for this product; FK to ERM_APP_USER',
-  EFFECTIVE_START_DATE  DATE          NULL                                COMMENT 'Date from which the product is available or became available to members',
-  EFFECTIVE_END_DATE    DATE          NULL                                COMMENT 'Date after which the product is no longer available; NULL if still current',
-  CREATED_DATE          DATE          NULL                                COMMENT 'Calendar date on which the product record was first created in the system',
-  UPDATED_DATE          DATE          NULL                                COMMENT 'Calendar date on which the product record was most recently modified',
-  UNIQUE KEY uq_product_code (CODE),
-  CONSTRAINT fk_product_owner
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Benefits and services managed by the organisation, including ownership, lifecycle status, and effective dates';
-
--- ── ERM_PRODUCT_TAG ───────────────────────────────────────────
-
-CREATE TABLE ERM_PRODUCT_TAG (
-  PRODUCT_TAG_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the tag assignment',
-  PRODUCT_ID      INT          NOT NULL                           COMMENT 'Reference to the product this tag is applied to; FK to ERM_PRODUCT',
-  TAG             VARCHAR(100) NOT NULL                           COMMENT 'Free-text keyword or label applied to the product for search and filtering purposes',
-  UNIQUE KEY uq_product_tag (PRODUCT_ID, TAG),
-  CONSTRAINT fk_ptag_product
-    FOREIGN KEY (PRODUCT_ID) REFERENCES ERM_PRODUCT (PRODUCT_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Keyword tags assigned to products to aid categorisation, search, and filtering in the UI';
-
--- ── ERM_PRODUCT_PROCESS_ASSOCIATION ───────────────────────────
--- Junction: processes (and optionally sub-processes) that deliver
--- or support a product.
-
-CREATE TABLE ERM_PRODUCT_PROCESS_ASSOCIATION (
-  PRODUCT_PROCESS_ASSOCIATION_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the junction row',
-  PRODUCT_ID                      INT NOT NULL                           COMMENT 'Reference to the product supported by this process; FK to ERM_PRODUCT',
-  PROCESS_ID                      INT NOT NULL                           COMMENT 'Reference to the top-level business process linked to the product; FK to ERM_PROCESS',
-  SUBPROCESS_ID                   INT NULL                               COMMENT 'Optional reference to the specific sub-process most relevant to this product link; FK to ERM_SUBPROCESS',
-  UNIQUE KEY uq_product_process (PRODUCT_ID, PROCESS_ID),
-  CONSTRAINT fk_ppa_product
-    FOREIGN KEY (PRODUCT_ID)    REFERENCES ERM_PRODUCT    (PRODUCT_ID)    ON DELETE CASCADE,
-  CONSTRAINT fk_ppa_process
-    FOREIGN KEY (PROCESS_ID)    REFERENCES ERM_PROCESS    (PROCESS_ID)    ON DELETE CASCADE,
-  CONSTRAINT fk_ppa_subprocess
-    FOREIGN KEY (SUBPROCESS_ID) REFERENCES ERM_SUBPROCESS (SUBPROCESS_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table linking products to the business processes and sub-processes that deliver or support them';
-
--- ── ERM_PRODUCT_VENDOR ────────────────────────────────────────
--- Junction: vendors that supply or support a product.
-
-CREATE TABLE ERM_PRODUCT_VENDOR (
-  PRODUCT_VENDOR_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the junction row',
-  PRODUCT_ID         INT NOT NULL                           COMMENT 'Reference to the product being supplied or supported; FK to ERM_PRODUCT',
-  VENDOR_ID          INT NOT NULL                           COMMENT 'Reference to the vendor that supplies or supports the product; FK to ERM_VENDOR',
-  UNIQUE KEY uq_product_vendor (PRODUCT_ID, VENDOR_ID),
-  CONSTRAINT fk_pv_product
-    FOREIGN KEY (PRODUCT_ID) REFERENCES ERM_PRODUCT (PRODUCT_ID) ON DELETE CASCADE,
-  CONSTRAINT fk_pv_vendor
-    FOREIGN KEY (VENDOR_ID)  REFERENCES ERM_VENDOR  (VENDOR_ID)  ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table linking products to the vendors that supply or support them';
-
--- ── ERM_PROCESS ───────────────────────────────────────────────
--- Top-level business process definitions.
--- localStorage key: 'erm_processes_v2'
-
-CREATE TABLE ERM_PROCESS (
-  PROCESS_ID            INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                  VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. PRC-001; unique across all processes',
-  NAME                  VARCHAR(255) NOT NULL                            COMMENT 'Short descriptive name of the business process as used in navigation and lists',
-  SHORT_DESCRIPTION     TEXT         NULL                                COMMENT 'Brief one-to-two sentence summary of what the process does, shown in list views',
-  PURPOSE               TEXT         NULL                                COMMENT 'Statement of why this process exists and the business value it delivers',
-  SCOPE                 TEXT         NULL                                COMMENT 'Definition of what is and is not included within the boundaries of this process',
-  BUSINESS_DOMAIN       VARCHAR(100) NULL                                COMMENT 'High-level functional area or business domain this process belongs to, e.g. Claims, Finance',
-  APP_USER_ID           INT          NULL                                COMMENT 'Internal user accountable for maintaining and governing this process; FK to ERM_APP_USER',
-  STATUS                VARCHAR(10)  NOT NULL DEFAULT 'Draft'            COMMENT 'Publication lifecycle state of the process (Draft, Active, Retired); see enum: process_status', -- enum: process_status
-  EFFECTIVE_START_DATE  DATE         NULL                                COMMENT 'Date from which this process definition is considered current and in effect',
-  EFFECTIVE_END_DATE    DATE         NULL                                COMMENT 'Date after which this process definition is superseded or retired; NULL if still current',
-  CREATED_DATE          DATE         NULL                                COMMENT 'Calendar date on which the process record was first created in the system',
-  UPDATED_DATE          DATE         NULL                                COMMENT 'Calendar date on which the process record was most recently modified',
-  UNIQUE KEY uq_process_code (CODE),
-  CONSTRAINT fk_process_owner
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Top-level business process definitions including purpose, scope, ownership, and lifecycle status';
-
--- ── ERM_PROCESS_TAG ───────────────────────────────────────────
-
-CREATE TABLE ERM_PROCESS_TAG (
-  PROCESS_TAG_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the tag assignment',
-  PROCESS_ID      INT          NOT NULL                           COMMENT 'Reference to the process this tag is applied to; FK to ERM_PROCESS',
-  TAG             VARCHAR(100) NOT NULL                           COMMENT 'Free-text keyword or label applied to the process for search and filtering purposes',
-  UNIQUE KEY uq_process_tag (PROCESS_ID, TAG),
-  CONSTRAINT fk_ptag_process
-    FOREIGN KEY (PROCESS_ID) REFERENCES ERM_PROCESS (PROCESS_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Keyword tags assigned to processes to aid categorisation, search, and filtering in the UI';
-
--- ── ERM_PROCESS_DEPENDENCY ────────────────────────────────────
--- Self-referential: processes that must exist before this process
--- can run (Process.dependsOnProcessIds[]).
-
-CREATE TABLE ERM_PROCESS_DEPENDENCY (
-  PROCESS_DEPENDENCY_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the dependency relationship',
-  PROCESS_ID             INT NOT NULL                           COMMENT 'The dependent process that requires DEPENDS_ON_PROCESS_ID to exist first; FK to ERM_PROCESS',
-  DEPENDS_ON_PROCESS_ID  INT NOT NULL                           COMMENT 'The prerequisite process that must be completed before PROCESS_ID can run; FK to ERM_PROCESS',
-  UNIQUE KEY uq_process_dependency (PROCESS_ID, DEPENDS_ON_PROCESS_ID),
-  CONSTRAINT chk_no_self_dependency
-    CHECK (PROCESS_ID <> DEPENDS_ON_PROCESS_ID),
-  CONSTRAINT fk_pd_process
-    FOREIGN KEY (PROCESS_ID)            REFERENCES ERM_PROCESS (PROCESS_ID) ON DELETE CASCADE,
-  CONSTRAINT fk_pd_depends_on_process
-    FOREIGN KEY (DEPENDS_ON_PROCESS_ID) REFERENCES ERM_PROCESS (PROCESS_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Self-referential table recording prerequisite dependencies between business processes';
-
--- ── ERM_SUBPROCESS ────────────────────────────────────────────
--- Child decomposition units within a process.
-
-CREATE TABLE ERM_SUBPROCESS (
-  SUBPROCESS_ID   INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE            VARCHAR(20)  NOT NULL                           COMMENT 'Human-readable identifier, e.g. SUB-001; unique across all sub-processes',
-  PROCESS_ID      INT          NOT NULL                           COMMENT 'Reference to the parent process this sub-process belongs to; FK to ERM_PROCESS',
-  NAME            VARCHAR(255) NOT NULL                           COMMENT 'Short descriptive name of the sub-process as shown in navigation and process maps',
-  DESCRIPTION     TEXT         NULL                               COMMENT 'Detailed description of the activities and responsibilities within this sub-process',
-  OBJECTIVE       TEXT         NULL                               COMMENT 'Stated outcome or goal that this sub-process is designed to achieve',
-  BOUNDARY_START  TEXT         NULL                               COMMENT 'Trigger or input that marks the start boundary of this sub-process (entry point)',
-  BOUNDARY_END    TEXT         NULL                               COMMENT 'Output or condition that marks the end boundary of this sub-process (exit point)',
-  APP_USER_ID     INT          NULL                               COMMENT 'Internal user accountable for maintaining and governing this sub-process; FK to ERM_APP_USER',
-  UNIQUE KEY uq_subprocess_code (CODE),
-  CONSTRAINT fk_sub_process
-    FOREIGN KEY (PROCESS_ID)  REFERENCES ERM_PROCESS  (PROCESS_ID)  ON DELETE CASCADE,
-  CONSTRAINT fk_sub_app_user
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Child decomposition units within a business process, defining objectives, boundaries, and ownership';
-
--- ── ERM_SUBPROCESS_TAG ────────────────────────────────────────
-
-CREATE TABLE ERM_SUBPROCESS_TAG (
-  SUBPROCESS_TAG_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the tag assignment',
-  SUBPROCESS_ID      INT          NOT NULL                           COMMENT 'Reference to the sub-process this tag is applied to; FK to ERM_SUBPROCESS',
-  TAG                VARCHAR(100) NOT NULL                           COMMENT 'Free-text keyword or label applied to the sub-process for search and filtering purposes',
-  UNIQUE KEY uq_subprocess_tag (SUBPROCESS_ID, TAG),
-  CONSTRAINT fk_stag_subprocess
-    FOREIGN KEY (SUBPROCESS_ID) REFERENCES ERM_SUBPROCESS (SUBPROCESS_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Keyword tags assigned to sub-processes to aid categorisation, search, and filtering in the UI';
-
--- ── ERM_STEP ──────────────────────────────────────────────────
--- Individual workflow steps within a sub-process.
-
-CREATE TABLE ERM_STEP (
-  STEP_ID           INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE              VARCHAR(20)  NOT NULL                           COMMENT 'Human-readable identifier, e.g. STP-001; unique across all steps',
-  SUBPROCESS_ID     INT          NOT NULL                           COMMENT 'Reference to the parent sub-process this step belongs to; FK to ERM_SUBPROCESS',
-  TYPE              VARCHAR(10)  NOT NULL DEFAULT 'Task'            COMMENT 'Classification of this step in the workflow (Task, Decision, Hand-off); see enum: step_type', -- enum: step_type
-  DESCRIPTION       TEXT         NULL                               COMMENT 'Full description of the work performed or decision made at this step',
-  INPUT             TEXT         NULL                               COMMENT 'Data, documents, or conditions required as input before this step can begin',
-  OUTPUT            TEXT         NULL                               COMMENT 'Data, documents, or artefacts produced as output when this step is complete',
-  ENTRY_CRITERIA    TEXT         NULL                               COMMENT 'Conditions that must be met for this step to be entered; complements INPUT',
-  EXIT_CRITERIA     TEXT         NULL                               COMMENT 'Conditions that must be satisfied for this step to be considered complete; complements OUTPUT',
-  SYSTEM_TOOL       VARCHAR(255) NULL                               COMMENT 'Name of the application, platform, or tool used to execute this step, e.g. Appian, Salesforce',
-  RESPONSIBLE_ROLE  VARCHAR(255) NULL                               COMMENT 'Job role or team accountable for performing this step, e.g. Claims Analyst, Finance Manager',
-  SORT_ORDER        INT          NOT NULL DEFAULT 0                 COMMENT 'Numeric position controlling the display order of this step within its sub-process',
-  UNIQUE KEY uq_step_code (CODE),
-  CONSTRAINT fk_step_subprocess
-    FOREIGN KEY (SUBPROCESS_ID) REFERENCES ERM_SUBPROCESS (SUBPROCESS_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Individual workflow steps within a sub-process, capturing inputs, outputs, tools, and responsible roles';
-
--- ── ERM_STEP_LINK ─────────────────────────────────────────────
--- Self-referential: directed edges between steps within a
--- sub-process flow (Step.linkedStepIds[]).
-
-CREATE TABLE ERM_STEP_LINK (
-  STEP_LINK_ID  INT NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the directed edge',
-  FROM_STEP_ID  INT NOT NULL                           COMMENT 'The source step of the directed flow edge; FK to ERM_STEP',
-  TO_STEP_ID    INT NOT NULL                           COMMENT 'The target step that follows the source in the workflow flow; FK to ERM_STEP',
-  UNIQUE KEY uq_step_link (FROM_STEP_ID, TO_STEP_ID),
-  CONSTRAINT chk_no_self_step_link
-    CHECK (FROM_STEP_ID <> TO_STEP_ID),
-  CONSTRAINT fk_sl_from_step
-    FOREIGN KEY (FROM_STEP_ID) REFERENCES ERM_STEP (STEP_ID) ON DELETE CASCADE,
-  CONSTRAINT fk_sl_to_step
-    FOREIGN KEY (TO_STEP_ID)   REFERENCES ERM_STEP (STEP_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Directed flow edges between steps representing the sequence and branching within a sub-process workflow';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 5 — RISK MANAGEMENT
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_RISK_CATEGORY ─────────────────────────────────────────
--- Hierarchical risk taxonomy.
--- Self-referential: PARENT_RISK_CATEGORY_ID NULL = top-level domain.
--- localStorage key: 'erm_risk_categories_v1'
-
-CREATE TABLE ERM_RISK_CATEGORY (
-  RISK_CATEGORY_ID         INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the risk category',
-  CODE                     VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. RCAT-001; unique across all risk categories',
-  NAME                     VARCHAR(255) NOT NULL                            COMMENT 'Full display name of the risk category, e.g. Cyber Risk or Operational Risk',
-  CATEGORY_CODE            VARCHAR(20)  NOT NULL                            COMMENT 'Short mnemonic code used in risk identifiers and reports, e.g. CYB or OPS',
-  DESCRIPTION              TEXT         NULL                                COMMENT 'Explanation of the types of risk covered by this category',
-  COLOR_HEX                VARCHAR(7)   NULL                                COMMENT 'Hex colour code used to visually represent this category in charts and badges, e.g. #C0392B',
-  PARENT_RISK_CATEGORY_ID  INT          NULL                                COMMENT 'Reference to the parent category for hierarchical taxonomies; NULL indicates a top-level domain; FK to ERM_RISK_CATEGORY',
-  SORT_ORDER               INT          NOT NULL DEFAULT 0                  COMMENT 'Numeric position controlling the display order of this category within its parent level',
-  UNIQUE KEY uq_risk_category_code (CODE),
-  CONSTRAINT fk_rcat_parent
-    FOREIGN KEY (PARENT_RISK_CATEGORY_ID)
-    REFERENCES ERM_RISK_CATEGORY (RISK_CATEGORY_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Hierarchical risk taxonomy used to classify and group risks across the enterprise risk register';
-
--- ── ERM_RISK ──────────────────────────────────────────────────
--- Core risk register.
--- Self-referential: ENTERPRISE_RISK_ID links a unit risk to its
--- parent enterprise risk (NULL for enterprise risks themselves).
--- localStorage key: 'erm_risks_v1'
-
-CREATE TABLE ERM_RISK (
-  RISK_ID              INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                 VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. RSK-001; unique across all risks',
-  RISK_CATEGORY_ID     INT          NOT NULL                            COMMENT 'Risk taxonomy category this risk belongs to; FK to ERM_RISK_CATEGORY',
-  DEPARTMENT           VARCHAR(100) NULL                                COMMENT 'Organisational department most directly affected by or responsible for this risk',
-  APP_USER_ID          INT          NULL                                COMMENT 'Internal user accountable for monitoring and managing this risk; FK to ERM_APP_USER',
-  TITLE                VARCHAR(500) NOT NULL                            COMMENT 'Concise statement of the risk event or condition, written in risk statement format',
-  DESCRIPTION          TEXT         NULL                                COMMENT 'Detailed explanation of the risk, including causes, potential consequences, and context',
-  STATUS               VARCHAR(10)  NOT NULL DEFAULT 'draft'            COMMENT 'Lifecycle state of the risk record (draft, active, closed, archived); see enum: risk_status',     -- enum: risk_status
-  RISK_TYPE            VARCHAR(15)  NOT NULL                            COMMENT 'Nature of the risk (strategic, operational, financial, compliance, reputational, cyber); see enum: risk_type', -- enum: risk_type
-  APPETITE_LEVEL       VARCHAR(10)  NOT NULL DEFAULT 'cautious'         COMMENT 'Organisation risk appetite for this risk (averse, minimal, cautious, open, hungry); see enum: appetite_level', -- enum: appetite_level
-  REVIEW_FREQUENCY     VARCHAR(15)  NOT NULL DEFAULT 'quarterly'        COMMENT 'How often this risk must be formally reviewed (monthly, quarterly, semi_annual, annual); see enum: review_frequency', -- enum: review_frequency
-  NEXT_REVIEW_DATE     DATE         NULL                                COMMENT 'Date by which the next formal review of this risk is due',
-  IS_ENTERPRISE_RISK   BOOLEAN      NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether this is an enterprise-level risk (TRUE) or a unit-level risk (FALSE)',
-  ENTERPRISE_RISK_ID   INT          NULL                                COMMENT 'For unit-level risks, reference to the parent enterprise risk; NULL for enterprise risks themselves; FK to ERM_RISK',
-  CREATED_AT           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which the risk record was first created; set automatically on insert',
-  CREATED_BY           VARCHAR(255) NULL                                COMMENT 'Denormalised name or identifier of the user who created this risk record',
-  UPDATED_AT           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                             ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the most recent update to this risk record; refreshed automatically on every UPDATE',
-  UPDATED_BY           VARCHAR(255) NULL                                COMMENT 'Denormalised name or identifier of the user who last modified this risk record',
-  UNIQUE KEY uq_risk_code (CODE),
-  CONSTRAINT fk_risk_category
-    FOREIGN KEY (RISK_CATEGORY_ID)   REFERENCES ERM_RISK_CATEGORY (RISK_CATEGORY_ID) ON DELETE RESTRICT,
-  CONSTRAINT fk_risk_app_user
-    FOREIGN KEY (APP_USER_ID)        REFERENCES ERM_APP_USER      (APP_USER_ID)      ON DELETE SET NULL,
-  CONSTRAINT fk_risk_enterprise
-    FOREIGN KEY (ENTERPRISE_RISK_ID) REFERENCES ERM_RISK          (RISK_ID)          ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Core enterprise risk register capturing risk statements, classification, ownership, and lifecycle status';
-
--- ── ERM_RISK_ASSESSMENT ───────────────────────────────────────
--- Scored evaluation of a risk at a point in time.
--- Scores: LIKELIHOOD_SCORE (1-5) × IMPACT_SCORE (1-5) → INHERENT_SCORE (1-25).
--- RESIDUAL_SCORE = after existing controls.
--- TARGET_SCORE   = desired end-state.
--- IS_CURRENT     = TRUE for the active assessment; application
---                  layer enforces at most one current per risk.
--- localStorage key: 'erm_risk_assessments_v1'
-
-CREATE TABLE ERM_RISK_ASSESSMENT (
-  RISK_ASSESSMENT_ID   INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the assessment record',
-  CODE                 VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. ASMT-001; unique across all risk assessments',
-  RISK_ID              INT          NOT NULL                            COMMENT 'Reference to the risk being assessed; FK to ERM_RISK',
-  REVIEWER_APP_USER_ID INT          NULL                                COMMENT 'Internal user who reviewed and approved this assessment; FK to ERM_APP_USER',
-  ASSESSMENT_DATE      DATE         NOT NULL                            COMMENT 'Calendar date on which this risk assessment was formally conducted',
-  ASSESSMENT_TYPE      VARCHAR(15)  NOT NULL DEFAULT 'periodic'         COMMENT 'Reason this assessment was performed (periodic, triggered, ad_hoc); see enum: assessment_type',  -- enum: assessment_type
-  LIKELIHOOD_SCORE     TINYINT      NOT NULL                            COMMENT 'Probability of the risk occurring on a 1 (very unlikely) to 5 (almost certain) scale',
-  IMPACT_SCORE         TINYINT      NOT NULL                            COMMENT 'Severity of consequences if the risk occurs on a 1 (negligible) to 5 (catastrophic) scale',
-  VELOCITY_SCORE       TINYINT      NULL                                COMMENT 'Speed at which the risk could materialise on a 1 (slow) to 5 (immediate) scale; optional',
-  INHERENT_SCORE       DECIMAL(6,2) NOT NULL                            COMMENT 'Raw risk exposure before controls, calculated as LIKELIHOOD_SCORE multiplied by IMPACT_SCORE',
-  RESIDUAL_SCORE       DECIMAL(6,2) NOT NULL                            COMMENT 'Remaining risk exposure after applying existing controls; must be less than or equal to INHERENT_SCORE',
-  TARGET_SCORE         DECIMAL(6,2) NULL                                COMMENT 'Desired residual score after all planned mitigations are fully implemented',
-  RISK_RATING          VARCHAR(15)  NOT NULL                            COMMENT 'Descriptive band derived from RESIDUAL_SCORE (critical, high, medium, low, negligible); see enum: risk_rating', -- enum: risk_rating
-  NOTES                TEXT         NULL                                COMMENT 'Assessor commentary, rationale for scores, or any caveats relevant to this assessment',
-  IS_CURRENT           BOOLEAN      NOT NULL DEFAULT FALSE              COMMENT 'Flag indicating this is the currently active assessment for the risk; application enforces at most one per risk',
-  CREATED_AT           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which this assessment record was created; set automatically on insert',
-  UPDATED_AT           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                             ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the most recent update to this assessment; refreshed automatically on every UPDATE',
-  UNIQUE KEY uq_risk_assessment_code (CODE),
-  CONSTRAINT chk_likelihood CHECK (LIKELIHOOD_SCORE BETWEEN 1 AND 5),
-  CONSTRAINT chk_impact      CHECK (IMPACT_SCORE     BETWEEN 1 AND 5),
-  CONSTRAINT chk_velocity    CHECK (VELOCITY_SCORE IS NULL
-                                    OR VELOCITY_SCORE BETWEEN 1 AND 5),
-  CONSTRAINT fk_ra_risk
-    FOREIGN KEY (RISK_ID)              REFERENCES ERM_RISK     (RISK_ID)     ON DELETE CASCADE,
-  CONSTRAINT fk_ra_reviewer_app_user
-    FOREIGN KEY (REVIEWER_APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Point-in-time scored evaluations of risks, capturing likelihood, impact, and residual exposure';
-
--- ── ERM_RISK_MITIGATION_ACTION ────────────────────────────────
--- Treatment actions (mitigate, accept, transfer, avoid) for a risk.
--- EFFECTIVENESS_SCORE: 1=Ineffective … 5=Highly Effective.
--- localStorage key: 'erm_risk_mitigations_v1'
-
-CREATE TABLE ERM_RISK_MITIGATION_ACTION (
-  RISK_MITIGATION_ACTION_ID    INT           NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the mitigation action',
-  CODE                         VARCHAR(20)   NOT NULL                            COMMENT 'Human-readable identifier, e.g. MIT-001; unique across all mitigation actions',
-  RISK_ID                      INT           NOT NULL                            COMMENT 'Reference to the risk this action is intended to treat; FK to ERM_RISK',
-  ASSIGNED_TO_APP_USER_ID      INT           NULL                                COMMENT 'Internal user responsible for executing or tracking this action; FK to ERM_APP_USER',
-  APPROVED_BY_APP_USER_ID      INT           NULL                                COMMENT 'Internal user who reviewed and approved this mitigation action; FK to ERM_APP_USER',
-  TITLE                        VARCHAR(500)  NOT NULL                            COMMENT 'Concise name or headline of the mitigation action',
-  DESCRIPTION                  TEXT          NULL                                COMMENT 'Detailed explanation of the action to be taken, including steps and expected outcome',
-  ACTION_TYPE                  VARCHAR(10)   NOT NULL                            COMMENT 'Treatment strategy applied to the risk (mitigate, accept, transfer, avoid); see enum: mitigation_action_type', -- enum: mitigation_action_type
-  STATUS                       VARCHAR(15)   NOT NULL DEFAULT 'open'             COMMENT 'Current execution state of the action (open, in_progress, complete, deferred, cancelled); see enum: mitigation_status', -- enum: mitigation_status
-  PRIORITY                     VARCHAR(10)   NOT NULL DEFAULT 'medium'           COMMENT 'Urgency level for completing this action (critical, high, medium, low); see enum: mitigation_priority', -- enum: mitigation_priority
-  DUE_DATE                     DATE          NULL                                COMMENT 'Target date by which this action should be completed',
-  COMPLETION_DATE              DATE          NULL                                COMMENT 'Actual date on which this action was completed; NULL if still in progress',
-  COST_ESTIMATE                DECIMAL(15,2) NULL                                COMMENT 'Estimated cost in base currency to implement this mitigation action',
-  EFFECTIVENESS_SCORE          TINYINT       NULL                                COMMENT 'Post-implementation effectiveness rating on a 1 (ineffective) to 5 (highly effective) scale',
-  CREATED_AT                   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which this action record was created; set automatically on insert',
-  UPDATED_AT                   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                                      ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the most recent update to this action; refreshed automatically on every UPDATE',
-  UNIQUE KEY uq_mitigation_code (CODE),
-  CONSTRAINT chk_effectiveness
-    CHECK (EFFECTIVENESS_SCORE IS NULL OR EFFECTIVENESS_SCORE BETWEEN 1 AND 5),
-  CONSTRAINT fk_mit_risk
-    FOREIGN KEY (RISK_ID)                 REFERENCES ERM_RISK     (RISK_ID)     ON DELETE CASCADE,
-  CONSTRAINT fk_mit_assigned_to_app_user
-    FOREIGN KEY (ASSIGNED_TO_APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL,
-  CONSTRAINT fk_mit_approved_by_app_user
-    FOREIGN KEY (APPROVED_BY_APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Treatment actions assigned to risks, covering strategy, ownership, progress tracking, and effectiveness';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 6 — CONTROL REGISTRY
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_CONTROL ───────────────────────────────────────────────
--- Individual controls in the organisation's control library.
--- localStorage key: 'erm_controls_v1'
-
-CREATE TABLE ERM_CONTROL (
-  CONTROL_ID           INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                 VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. CTL-001; unique across all controls',
-  APP_USER_ID          INT          NULL                                COMMENT 'Internal user accountable for this control; FK to ERM_APP_USER',
-  DEPARTMENT           VARCHAR(100) NULL                                COMMENT 'Organisational department responsible for operating and maintaining this control',
-  NAME                 VARCHAR(500) NOT NULL                            COMMENT 'Concise name of the control activity as it appears in the control library',
-  DESCRIPTION          TEXT         NULL                                COMMENT 'Full description of what the control does, how it operates, and the risk it addresses',
-  CONTROL_TYPE         VARCHAR(15)  NOT NULL                            COMMENT 'Category of control activity (preventive, detective, corrective, directive, compensating); see enum: control_type', -- enum: control_type
-  FREQUENCY            VARCHAR(15)  NOT NULL DEFAULT 'monthly'          COMMENT 'How often the control activity is performed (continuous, daily, weekly, monthly, quarterly, annual); see enum: control_frequency', -- enum: control_frequency
-  EFFECTIVENESS        VARCHAR(25)  NOT NULL DEFAULT 'not_tested'       COMMENT 'Current assessed effectiveness of the control (effective, partially_effective, ineffective, not_tested); see enum: control_effectiveness', -- enum: control_effectiveness
-  IS_AUTOMATED         BOOLEAN      NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether the control is automated by a system (TRUE) or requires manual execution (FALSE)',
-  LAST_TESTED_DATE     DATE         NULL                                COMMENT 'Date on which this control was most recently tested or validated',
-  NEXT_TEST_DATE       DATE         NULL                                COMMENT 'Date by which the next control test or review is scheduled',
-  STATUS               VARCHAR(15)  NOT NULL DEFAULT 'in_design'        COMMENT 'Operational lifecycle state of the control (active, inactive, in_design, deprecated); see enum: control_status', -- enum: control_status
-  FRAMEWORK_REFERENCE  VARCHAR(255) NULL                                COMMENT 'External framework clause or control reference this control maps to, e.g. ISO 27001 A.9.2.1',
-  CREATED_AT           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which the control record was first created; set automatically on insert',
-  UPDATED_AT           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                             ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the most recent update to this control record; refreshed automatically on every UPDATE',
-  UNIQUE KEY uq_control_code (CODE),
-  CONSTRAINT fk_control_app_user
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Organisation control library defining each control activity, its type, frequency, effectiveness, and ownership';
-
--- ── ERM_RISK_CONTROL ──────────────────────────────────────────
--- Junction: controls mapped to the risks they mitigate.
--- localStorage key: 'erm_risk_controls_v1'
-
-CREATE TABLE ERM_RISK_CONTROL (
-  RISK_CONTROL_ID          INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the risk-to-control mapping',
-  RISK_ID                  INT          NOT NULL                            COMMENT 'Reference to the risk being addressed by this control; FK to ERM_RISK',
-  CONTROL_ID               INT          NOT NULL                            COMMENT 'Reference to the control that mitigates the risk; FK to ERM_CONTROL',
-  COVERAGE_LEVEL           VARCHAR(15)  NOT NULL DEFAULT 'partial'          COMMENT 'Degree to which this control addresses the risk (full, substantial, partial, minimal); see enum: coverage_level', -- enum: coverage_level
-  IS_PRIMARY               BOOLEAN      NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether this is the primary control for the risk (TRUE) versus a supplementary one (FALSE)',
-  MAPPING_NOTES            TEXT         NULL                                COMMENT 'Free-text notes explaining the rationale for this risk-control mapping or any coverage gaps',
-  CREATED_AT               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which this mapping was created; set automatically on insert',
-  CREATED_BY_APP_USER_ID   INT          NULL                                COMMENT 'Internal user who created this risk-control mapping; FK to ERM_APP_USER',
-  UNIQUE KEY uq_risk_control (RISK_ID, CONTROL_ID),
-  CONSTRAINT fk_rc_risk
-    FOREIGN KEY (RISK_ID)                REFERENCES ERM_RISK     (RISK_ID)     ON DELETE CASCADE,
-  CONSTRAINT fk_rc_control
-    FOREIGN KEY (CONTROL_ID)             REFERENCES ERM_CONTROL  (CONTROL_ID)  ON DELETE CASCADE,
-  CONSTRAINT fk_rc_created_by_app_user
-    FOREIGN KEY (CREATED_BY_APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table mapping controls to the risks they mitigate, including coverage level and primary flag';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 7 — COMPLIANCE FRAMEWORKS
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_COMPLIANCE_FRAMEWORK ─────────────────────────────────
--- Regulatory / standards frameworks (e.g. HITRUST, ISO 27001).
--- localStorage key: 'erm_compliance_frameworks_v1'
-
-CREATE TABLE ERM_COMPLIANCE_FRAMEWORK (
-  COMPLIANCE_FRAMEWORK_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the compliance framework',
-  CODE                     VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. FWK-001; unique across all compliance frameworks',
-  NAME                     VARCHAR(255) NOT NULL                            COMMENT 'Full official name of the framework or standard, e.g. HITRUST CSF v11 or ISO 27001:2022',
-  VERSION                  VARCHAR(50)  NULL                                COMMENT 'Version number or year of the framework edition being tracked, e.g. v11 or 2022',
-  GOVERNING_BODY           VARCHAR(255) NULL                                COMMENT 'Organisation or body that publishes and maintains this framework, e.g. HITRUST Alliance',
-  STATUS                   VARCHAR(10)  NOT NULL DEFAULT 'draft'            COMMENT 'Adoption lifecycle state of this framework (active, sunset, draft); see enum: framework_status', -- enum: framework_status
-  CERTIFICATION_REQUIRED   BOOLEAN      NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether formal third-party certification against this framework is required',
-  EFFECTIVE_DATE           DATE         NULL                                COMMENT 'Date from which this version of the framework became or becomes effective for the organisation',
-  NEXT_ASSESSMENT_DATE     DATE         NULL                                COMMENT 'Date by which the next formal compliance assessment against this framework is due',
-  DESCRIPTION              TEXT         NULL                                COMMENT 'Overview of the framework purpose, scope, and relevance to the organisation',
-  CREATED_AT               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which this framework record was created; set automatically on insert',
-  UPDATED_AT               DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                                 ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the most recent update to this framework record; refreshed automatically on every UPDATE',
-  UNIQUE KEY uq_framework_code (CODE)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Regulatory and standards frameworks the organisation is assessed against, such as HITRUST, ISO 27001, and SOC 2';
-
--- ── ERM_FRAMEWORK_REQUIREMENT ────────────────────────────────
--- Individual control requirements / clauses within a framework.
--- Hierarchical: PARENT_FRAMEWORK_REQUIREMENT_ID NULL = top-level domain.
--- MATURITY_LEVEL: HITRUST implementation levels (1-3); NULL for others.
--- localStorage key: 'erm_framework_requirements_v1'
-
-CREATE TABLE ERM_FRAMEWORK_REQUIREMENT (
-  FRAMEWORK_REQUIREMENT_ID         INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the framework requirement',
-  CODE                             VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. REQ-001; unique across all framework requirements',
-  COMPLIANCE_FRAMEWORK_ID          INT          NOT NULL                            COMMENT 'Reference to the parent compliance framework this requirement belongs to; FK to ERM_COMPLIANCE_FRAMEWORK',
-  PARENT_FRAMEWORK_REQUIREMENT_ID  INT          NULL                                COMMENT 'Reference to the parent requirement for hierarchical domain grouping; NULL indicates a top-level domain; FK to ERM_FRAMEWORK_REQUIREMENT',
-  REFERENCE_CODE                   VARCHAR(50)  NULL                                COMMENT 'Official clause or control reference from the framework document, e.g. 01.b, CC6.1, A.9.2.1',
-  TITLE                            VARCHAR(500) NOT NULL                            COMMENT 'Official title or short description of the requirement as stated in the framework',
-  DESCRIPTION                      TEXT         NULL                                COMMENT 'Full text or paraphrase of the requirement, including implementation guidance',
-  DOMAIN                           VARCHAR(255) NULL                                COMMENT 'Functional control domain or category within the framework, e.g. Access Control, Incident Management',
-  MATURITY_LEVEL                   TINYINT      NULL                                COMMENT 'HITRUST implementation maturity level (1, 2, or 3); NULL for non-HITRUST frameworks',
-  IS_REQUIRED                      BOOLEAN      NOT NULL DEFAULT TRUE               COMMENT 'Indicates whether this requirement is mandatory (TRUE) or advisory/optional (FALSE) for the organisation',
-  SORT_ORDER                       INT          NOT NULL DEFAULT 0                  COMMENT 'Numeric position controlling the display order within the parent domain or framework',
-  UNIQUE KEY uq_framework_requirement_code (CODE),
-  CONSTRAINT chk_fr_maturity_level
-    CHECK (MATURITY_LEVEL IS NULL OR MATURITY_LEVEL BETWEEN 1 AND 3),
-  CONSTRAINT fk_fr_compliance_framework
-    FOREIGN KEY (COMPLIANCE_FRAMEWORK_ID)
-    REFERENCES ERM_COMPLIANCE_FRAMEWORK  (COMPLIANCE_FRAMEWORK_ID) ON DELETE CASCADE,
-  CONSTRAINT fk_fr_parent
-    FOREIGN KEY (PARENT_FRAMEWORK_REQUIREMENT_ID)
-    REFERENCES ERM_FRAMEWORK_REQUIREMENT (FRAMEWORK_REQUIREMENT_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Individual control requirements or clauses within a compliance framework, organised hierarchically by domain';
-
--- ── ERM_CONTROL_REQUIREMENT_MAPPING ──────────────────────────
--- Junction: controls mapped to framework requirements with
--- implementation status and gap assessment metadata.
--- MATURITY_SCORE: 1-5 (HITRUST PRISMA scale); NULL for non-HITRUST.
--- localStorage key: 'erm_control_requirements_v1'
-
-CREATE TABLE ERM_CONTROL_REQUIREMENT_MAPPING (
-  CONTROL_REQUIREMENT_MAPPING_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the control-to-requirement mapping',
-  CODE                            VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. CRM-001; unique across all control requirement mappings',
-  CONTROL_ID                      INT          NOT NULL                            COMMENT 'Reference to the control being mapped to this requirement; FK to ERM_CONTROL',
-  FRAMEWORK_REQUIREMENT_ID        INT          NOT NULL                            COMMENT 'Reference to the framework requirement the control satisfies; FK to ERM_FRAMEWORK_REQUIREMENT',
-  IMPLEMENTATION_STATUS           VARCHAR(20)  NOT NULL DEFAULT 'not_started'      COMMENT 'Current implementation state for this mapping (not_started, in_progress, implemented, not_applicable); see enum: implementation_status', -- enum: implementation_status
-  MATURITY_SCORE                  TINYINT      NULL                                COMMENT 'HITRUST PRISMA maturity score on a 1 to 5 scale; NULL for non-HITRUST framework requirements',
-  EVIDENCE_DESCRIPTION            TEXT         NULL                                COMMENT 'Description of the evidence available to demonstrate the control satisfies this requirement',
-  GAP_NOTES                       TEXT         NULL                                COMMENT 'Description of identified gaps between the current control state and the full requirement',
-  LAST_ASSESSED_DATE              DATE         NULL                                COMMENT 'Date on which this mapping was most recently assessed or reviewed',
-  ASSESSOR_APP_USER_ID            INT          NULL                                COMMENT 'Internal user who performed the most recent assessment of this mapping; FK to ERM_APP_USER',
-  REMEDIATION_TARGET_DATE         DATE         NULL                                COMMENT 'Target date by which identified gaps are expected to be remediated',
-  UNIQUE KEY uq_control_requirement (CONTROL_ID, FRAMEWORK_REQUIREMENT_ID),
-  UNIQUE KEY uq_crm_code (CODE),
-  CONSTRAINT chk_crm_maturity_score
-    CHECK (MATURITY_SCORE IS NULL OR MATURITY_SCORE BETWEEN 1 AND 5),
-  CONSTRAINT fk_crm_control
-    FOREIGN KEY (CONTROL_ID)
-    REFERENCES ERM_CONTROL               (CONTROL_ID)               ON DELETE CASCADE,
-  CONSTRAINT fk_crm_framework_requirement
-    FOREIGN KEY (FRAMEWORK_REQUIREMENT_ID)
-    REFERENCES ERM_FRAMEWORK_REQUIREMENT (FRAMEWORK_REQUIREMENT_ID) ON DELETE CASCADE,
-  CONSTRAINT fk_crm_assessor_app_user
-    FOREIGN KEY (ASSESSOR_APP_USER_ID)
-    REFERENCES ERM_APP_USER              (APP_USER_ID)               ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table mapping controls to framework requirements with implementation status, maturity scores, and gap notes';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 8 — PROCESS LINKAGE (CROSS-DOMAIN JUNCTIONS)
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_PROCESS_RISK_LINK ─────────────────────────────────────
--- Junction: risks associated with a process or sub-process.
--- localStorage key: 'erm_process_risks_v1'
-
-CREATE TABLE ERM_PROCESS_RISK_LINK (
-  PROCESS_RISK_LINK_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the process-to-risk association',
-  CODE                  VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. PRL-001; unique across all process risk links',
-  PROCESS_ID            INT          NOT NULL                            COMMENT 'Reference to the top-level process associated with this risk; FK to ERM_PROCESS',
-  SUBPROCESS_ID         INT          NULL                                COMMENT 'Optional reference to the specific sub-process where the risk most directly applies; FK to ERM_SUBPROCESS',
-  RISK_ID               INT          NOT NULL                            COMMENT 'Reference to the risk associated with this process; FK to ERM_RISK',
-  NOTES                 TEXT         NULL                                COMMENT 'Free-text notes explaining how or why this risk applies to this process',
-  LINKED_AT             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which the process-risk association was created; set automatically on insert',
-  LINKED_BY             VARCHAR(255) NULL                                COMMENT 'Denormalised name of the user who created this process-risk association',
-  UNIQUE KEY uq_process_risk_link_code (CODE),
-  UNIQUE KEY uq_process_risk (PROCESS_ID, RISK_ID),
-  CONSTRAINT fk_prl_process
-    FOREIGN KEY (PROCESS_ID)    REFERENCES ERM_PROCESS    (PROCESS_ID)    ON DELETE CASCADE,
-  CONSTRAINT fk_prl_subprocess
-    FOREIGN KEY (SUBPROCESS_ID) REFERENCES ERM_SUBPROCESS (SUBPROCESS_ID) ON DELETE SET NULL,
-  CONSTRAINT fk_prl_risk
-    FOREIGN KEY (RISK_ID)       REFERENCES ERM_RISK        (RISK_ID)       ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table associating risks with the business processes and sub-processes they threaten';
-
--- ── ERM_PROCESS_CONTROL_LINK ─────────────────────────────────
--- Junction: controls applied within a process or sub-process.
--- IS_KEY_CONTROL: flags SOX / SOC 2 key controls.
--- localStorage key: 'erm_process_controls_v1'
-
-CREATE TABLE ERM_PROCESS_CONTROL_LINK (
-  PROCESS_CONTROL_LINK_ID  INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the process-to-control association',
-  CODE                     VARCHAR(20)  NOT NULL                            COMMENT 'Human-readable identifier, e.g. PCL-001; unique across all process control links',
-  PROCESS_ID               INT          NOT NULL                            COMMENT 'Reference to the top-level process where this control is applied; FK to ERM_PROCESS',
-  SUBPROCESS_ID            INT          NULL                                COMMENT 'Optional reference to the specific sub-process where the control operates; FK to ERM_SUBPROCESS',
-  CONTROL_ID               INT          NOT NULL                            COMMENT 'Reference to the control applied within this process; FK to ERM_CONTROL',
-  CONTROL_OBJECTIVE        TEXT         NULL                                COMMENT 'Specific objective the control is designed to achieve within the context of this process',
-  IS_KEY_CONTROL           BOOLEAN      NOT NULL DEFAULT FALSE              COMMENT 'Indicates whether this is a SOX or SOC 2 key control for this process (TRUE) or a supplementary control (FALSE)',
-  TESTING_FREQUENCY        VARCHAR(15)  NOT NULL DEFAULT 'Quarterly'        COMMENT 'How often this control is tested within the process context; see enum: process_control_testing_frequency',  -- enum: process_control_testing_frequency
-  LINKED_AT                DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT 'Timestamp at which the process-control association was created; set automatically on insert',
-  LINKED_BY                VARCHAR(255) NULL                                COMMENT 'Denormalised name of the user who created this process-control association',
-  UNIQUE KEY uq_process_control_link_code (CODE),
-  UNIQUE KEY uq_process_control (PROCESS_ID, CONTROL_ID),
-  CONSTRAINT fk_pcl_process
-    FOREIGN KEY (PROCESS_ID)    REFERENCES ERM_PROCESS    (PROCESS_ID)    ON DELETE CASCADE,
-  CONSTRAINT fk_pcl_subprocess
-    FOREIGN KEY (SUBPROCESS_ID) REFERENCES ERM_SUBPROCESS (SUBPROCESS_ID) ON DELETE SET NULL,
-  CONSTRAINT fk_pcl_control
-    FOREIGN KEY (CONTROL_ID)    REFERENCES ERM_CONTROL    (CONTROL_ID)    ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Junction table associating controls with the business processes and sub-processes they operate within';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 9 — KEY RISK INDICATORS (KRI DASHBOARD)
--- ════════════════════════════════════════════════════════════
---  KRI is a DMBA-accepted abbreviation for Key Risk Indicator.
-
--- ── ERM_KRI ───────────────────────────────────────────────────
--- KRI definitions with auto-calculation or manual entry modes.
--- THRESHOLD_DIRECTION 'lower_is_better':
---   green  ≤ GREEN_THRESHOLD
---   amber  ≤ AMBER_THRESHOLD
---   red    > AMBER_THRESHOLD
--- Reversed for 'higher_is_better'.
--- localStorage key: 'erm_kris_v1'
-
-CREATE TABLE ERM_KRI (
-  KRI_ID               INT           NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE                 VARCHAR(20)   NOT NULL                            COMMENT 'Human-readable identifier for this KRI; unique across all KRIs',
-  NAME                 VARCHAR(500)  NOT NULL                            COMMENT 'Descriptive name of the Key Risk Indicator as displayed on the dashboard',
-  DESCRIPTION          TEXT          NULL                                COMMENT 'Explanation of what this KRI measures and why it is a meaningful risk signal',
-  UNIT                 VARCHAR(50)   NULL                                COMMENT 'Unit of measurement for the KRI value, e.g. percentage, count, days, or USD',
-  CATEGORY             VARCHAR(100)  NULL                                COMMENT 'Functional grouping for this KRI used for dashboard filtering, e.g. Controls, Risks, Vendors',
-  CALCULATION_SOURCE   VARCHAR(40)   NOT NULL DEFAULT 'manual'           COMMENT 'How the CURRENT_VALUE is derived; auto sources query live data, manual requires owner entry; see enum: kri_calculation_source',  -- enum: kri_calculation_source
-  THRESHOLD_DIRECTION  VARCHAR(20)   NOT NULL DEFAULT 'lower_is_better'  COMMENT 'Determines how threshold bands are applied: lower_is_better assigns red to high values, higher_is_better reverses this; see enum: kri_threshold_direction', -- enum: kri_threshold_direction
-  GREEN_THRESHOLD      DECIMAL(10,4) NOT NULL                            COMMENT 'Upper bound (lower_is_better) or lower bound (higher_is_better) for the green status band',
-  AMBER_THRESHOLD      DECIMAL(10,4) NOT NULL                            COMMENT 'Upper bound (lower_is_better) or lower bound (higher_is_better) for the amber status band; beyond this is red',
-  CURRENT_VALUE        DECIMAL(10,4) NULL                                COMMENT 'Most recently calculated or manually entered value; drives the STATUS field; NULL means no data yet',
-  STATUS               VARCHAR(10)   NOT NULL DEFAULT 'no_data'          COMMENT 'Current traffic-light status derived from CURRENT_VALUE vs thresholds (green, amber, red, no_data); see enum: kri_status', -- enum: kri_status
-  APP_USER_ID          INT           NULL                                 COMMENT 'Internal user accountable for monitoring and maintaining this KRI; FK to ERM_APP_USER',
-  IS_ACTIVE            BOOLEAN       NOT NULL DEFAULT TRUE                COMMENT 'Indicates whether this KRI is actively displayed on the dashboard (TRUE) or archived (FALSE)',
-  CREATED_AT           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP   COMMENT 'Timestamp at which this KRI record was created; set automatically on insert',
-  UPDATED_AT           DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                              ON UPDATE CURRENT_TIMESTAMP COMMENT 'Timestamp of the most recent update to this KRI record; refreshed automatically on every UPDATE',
-  UNIQUE KEY uq_kri_code (CODE),
-  CONSTRAINT fk_kri_app_user
-    FOREIGN KEY (APP_USER_ID) REFERENCES ERM_APP_USER (APP_USER_ID) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Key Risk Indicator definitions with threshold bands, calculation sources, and current traffic-light status';
-
--- ── ERM_KRI_DATA_POINT ────────────────────────────────────────
--- Historical data points for trend charting (application retains
--- up to 6 per KRI, ordered oldest → newest).
--- Auto-calculated KRIs have points written by the engine;
--- manual KRIs have points entered by the owner.
-
-CREATE TABLE ERM_KRI_DATA_POINT (
-  KRI_DATA_POINT_ID  INT           NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the historical data point',
-  KRI_ID             INT           NOT NULL                            COMMENT 'Reference to the KRI this data point belongs to; FK to ERM_KRI',
-  POINT_DATE         DATE          NOT NULL                            COMMENT 'Calendar date for which this data point value was recorded or calculated',
-  VALUE              DECIMAL(10,4) NOT NULL                            COMMENT 'Numeric KRI value recorded on POINT_DATE, used for trend charting',
-  ENTERED_BY         VARCHAR(255)  NULL                                COMMENT 'Denormalised name of the user or system process that recorded this data point',
-  UNIQUE KEY uq_kri_data_point (KRI_ID, POINT_DATE),
-  CONSTRAINT fk_kdp_kri
-    FOREIGN KEY (KRI_ID) REFERENCES ERM_KRI (KRI_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Historical data points for each KRI, retained for trend charting; up to 6 points per KRI ordered oldest to newest';
-
-
--- ════════════════════════════════════════════════════════════
---  SECTION 10 — EMPLOYER MANAGEMENT
--- ════════════════════════════════════════════════════════════
-
--- ── ERM_EMPLOYER ─────────────────────────────────────────────
--- Legal employer entities managed by the organisation.
--- localStorage key: 'erm_employers_v1'
-
-CREATE TABLE ERM_EMPLOYER (
-  EMPLOYER_ID   INT          NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key; auto-incremented integer, never exposed in the UI',
-  CODE          VARCHAR(20)  NOT NULL                           COMMENT 'Human-readable identifier, e.g. EMP-001; unique across all employers',
-  NAME          VARCHAR(255) NOT NULL                           COMMENT 'Legal name of the employer entity as registered or recognised by the organisation',
-  IS_ACTIVE     BOOLEAN      NOT NULL DEFAULT TRUE              COMMENT 'Indicates whether the employer is currently active (TRUE) or has been deactivated (FALSE)',
-  CREATED_AT    DATE         NULL                               COMMENT 'Calendar date on which the employer record was first created in the system',
-  CREATED_BY    VARCHAR(255) NULL                               COMMENT 'Denormalised name of the user who created this employer record',
-  MODIFIED_AT   DATE         NULL                               COMMENT 'Calendar date on which the employer record was most recently modified',
-  MODIFIED_BY   VARCHAR(255) NULL                               COMMENT 'Denormalised name of the user who last modified this employer record',
-  UNIQUE KEY uq_employer_code (CODE)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Legal employer entities managed by the organisation, used for network graph visualisation and relationship tracking';
-
--- ── ERM_EMPLOYER_RELATIONSHIP ────────────────────────────────
--- Directed relationship between two employer entities.
--- EMPLOYER_ID is the source; RELATED_EMPLOYER_ID is the target.
--- RELATIONSHIP_TYPE describes the nature of the link.
--- localStorage key: 'erm_employer_relationships_v1'
-
-CREATE TABLE ERM_EMPLOYER_RELATIONSHIP (
-  EMPLOYER_RELATIONSHIP_ID  INT         NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'Surrogate primary key for the employer relationship record',
-  CODE                      VARCHAR(20) NOT NULL                            COMMENT 'Human-readable identifier, e.g. ERL-001; unique across all employer relationships',
-  EMPLOYER_ID               INT         NOT NULL                            COMMENT 'Source employer in the directed relationship; FK to ERM_EMPLOYER',
-  RELATED_EMPLOYER_ID       INT         NOT NULL                            COMMENT 'Target employer in the directed relationship; FK to ERM_EMPLOYER',
-  RELATIONSHIP_TYPE         VARCHAR(25) NOT NULL                            COMMENT 'Nature of the link between the two employers (Affiliate, Subsidiary, Non-Related Entity, Department, Other, Funding Entity); see enum: employer_relationship_type', -- enum: employer_relationship_type
-  UNIQUE KEY uq_employer_relationship_code (CODE),
-  UNIQUE KEY uq_employer_pair (EMPLOYER_ID, RELATED_EMPLOYER_ID),
-  CONSTRAINT chk_no_self_relationship
-    CHECK (EMPLOYER_ID <> RELATED_EMPLOYER_ID),
-  CONSTRAINT fk_er_employer
-    FOREIGN KEY (EMPLOYER_ID)         REFERENCES ERM_EMPLOYER (EMPLOYER_ID) ON DELETE CASCADE,
-  CONSTRAINT fk_er_related_employer
-    FOREIGN KEY (RELATED_EMPLOYER_ID) REFERENCES ERM_EMPLOYER (EMPLOYER_ID) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_unicode_ci
-  COMMENT='Directed relationships between employer entities, capturing the nature of the link for network graph rendering';
-
-
--- ════════════════════════════════════════════════════════════
---  Re-enable FK checks
--- ════════════════════════════════════════════════════════════
-
-SET FOREIGN_KEY_CHECKS = 1;
-
-
--- ════════════════════════════════════════════════════════════
---  SUMMARY OF FOREIGN KEY RELATIONSHIPS
--- ════════════════════════════════════════════════════════════
---
---  FOUNDATION
---  ──────────
---  ERM_APP_USER                              (no FK dependencies)
---
---  VENDOR & CONTRACT
---  ─────────────────
---  ERM_VENDOR                      .DMBA_VENDOR_MANAGER_APP_USER_ID → ERM_APP_USER.APP_USER_ID
---  ERM_VENDOR_INDIVIDUAL           .VENDOR_ID                       → ERM_VENDOR.VENDOR_ID
---  ERM_VENDOR_INDIVIDUAL           .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_VENDOR_PROCESS_ASSOCIATION  .VENDOR_ID                       → ERM_VENDOR.VENDOR_ID
---  ERM_VENDOR_PROCESS_ASSOCIATION  .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID
---  ERM_VENDOR_PROCESS_ASSOCIATION  .SUBPROCESS_ID                   → ERM_SUBPROCESS.SUBPROCESS_ID
---  ERM_VENDOR_CONTACT              .VENDOR_ID                       → ERM_VENDOR.VENDOR_ID
---  ERM_CONTRACT                    .VENDOR_ID                       → ERM_VENDOR.VENDOR_ID
---  ERM_CONTRACT_BUSINESS_OWNER     .CONTRACT_ID                     → ERM_CONTRACT.CONTRACT_ID
---  ERM_CONTRACT_BUSINESS_OWNER     .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_CONTRACT_INDIVIDUAL         .CONTRACT_ID                     → ERM_CONTRACT.CONTRACT_ID
---  ERM_CONTRACT_INDIVIDUAL         .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---
---  PRODUCT & PROCESS
---  ─────────────────
---  ERM_PRODUCT                     .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_PRODUCT_TAG                 .PRODUCT_ID                      → ERM_PRODUCT.PRODUCT_ID
---  ERM_PRODUCT_PROCESS_ASSOCIATION .PRODUCT_ID                      → ERM_PRODUCT.PRODUCT_ID
---  ERM_PRODUCT_PROCESS_ASSOCIATION .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID
---  ERM_PRODUCT_PROCESS_ASSOCIATION .SUBPROCESS_ID                   → ERM_SUBPROCESS.SUBPROCESS_ID
---  ERM_PRODUCT_VENDOR              .PRODUCT_ID                      → ERM_PRODUCT.PRODUCT_ID
---  ERM_PRODUCT_VENDOR              .VENDOR_ID                       → ERM_VENDOR.VENDOR_ID
---  ERM_PROCESS                     .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_PROCESS_TAG                 .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID
---  ERM_PROCESS_DEPENDENCY          .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID   (self-ref)
---  ERM_PROCESS_DEPENDENCY          .DEPENDS_ON_PROCESS_ID           → ERM_PROCESS.PROCESS_ID   (self-ref)
---  ERM_SUBPROCESS                  .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID
---  ERM_SUBPROCESS                  .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_SUBPROCESS_TAG              .SUBPROCESS_ID                   → ERM_SUBPROCESS.SUBPROCESS_ID
---  ERM_STEP                        .SUBPROCESS_ID                   → ERM_SUBPROCESS.SUBPROCESS_ID
---  ERM_STEP_LINK                   .FROM_STEP_ID                    → ERM_STEP.STEP_ID          (self-ref)
---  ERM_STEP_LINK                   .TO_STEP_ID                      → ERM_STEP.STEP_ID          (self-ref)
---
---  RISK MANAGEMENT
---  ───────────────
---  ERM_RISK_CATEGORY               .PARENT_RISK_CATEGORY_ID         → ERM_RISK_CATEGORY.RISK_CATEGORY_ID (self-ref)
---  ERM_RISK                        .RISK_CATEGORY_ID                → ERM_RISK_CATEGORY.RISK_CATEGORY_ID
---  ERM_RISK                        .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_RISK                        .ENTERPRISE_RISK_ID              → ERM_RISK.RISK_ID           (self-ref)
---  ERM_RISK_ASSESSMENT             .RISK_ID                         → ERM_RISK.RISK_ID
---  ERM_RISK_ASSESSMENT             .REVIEWER_APP_USER_ID            → ERM_APP_USER.APP_USER_ID
---  ERM_RISK_MITIGATION_ACTION      .RISK_ID                         → ERM_RISK.RISK_ID
---  ERM_RISK_MITIGATION_ACTION      .ASSIGNED_TO_APP_USER_ID         → ERM_APP_USER.APP_USER_ID
---  ERM_RISK_MITIGATION_ACTION      .APPROVED_BY_APP_USER_ID         → ERM_APP_USER.APP_USER_ID
---
---  CONTROL REGISTRY
---  ────────────────
---  ERM_CONTROL                     .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_RISK_CONTROL                .RISK_ID                         → ERM_RISK.RISK_ID
---  ERM_RISK_CONTROL                .CONTROL_ID                      → ERM_CONTROL.CONTROL_ID
---  ERM_RISK_CONTROL                .CREATED_BY_APP_USER_ID          → ERM_APP_USER.APP_USER_ID
---
---  COMPLIANCE FRAMEWORKS
---  ─────────────────────
---  ERM_FRAMEWORK_REQUIREMENT       .COMPLIANCE_FRAMEWORK_ID         → ERM_COMPLIANCE_FRAMEWORK.COMPLIANCE_FRAMEWORK_ID
---  ERM_FRAMEWORK_REQUIREMENT       .PARENT_FRAMEWORK_REQUIREMENT_ID → ERM_FRAMEWORK_REQUIREMENT.FRAMEWORK_REQUIREMENT_ID (self-ref)
---  ERM_CONTROL_REQUIREMENT_MAPPING .CONTROL_ID                      → ERM_CONTROL.CONTROL_ID
---  ERM_CONTROL_REQUIREMENT_MAPPING .FRAMEWORK_REQUIREMENT_ID        → ERM_FRAMEWORK_REQUIREMENT.FRAMEWORK_REQUIREMENT_ID
---  ERM_CONTROL_REQUIREMENT_MAPPING .ASSESSOR_APP_USER_ID            → ERM_APP_USER.APP_USER_ID
---
---  PROCESS LINKAGE
---  ───────────────
---  ERM_PROCESS_RISK_LINK           .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID
---  ERM_PROCESS_RISK_LINK           .SUBPROCESS_ID                   → ERM_SUBPROCESS.SUBPROCESS_ID
---  ERM_PROCESS_RISK_LINK           .RISK_ID                         → ERM_RISK.RISK_ID
---  ERM_PROCESS_CONTROL_LINK        .PROCESS_ID                      → ERM_PROCESS.PROCESS_ID
---  ERM_PROCESS_CONTROL_LINK        .SUBPROCESS_ID                   → ERM_SUBPROCESS.SUBPROCESS_ID
---  ERM_PROCESS_CONTROL_LINK        .CONTROL_ID                      → ERM_CONTROL.CONTROL_ID
---
---  KRI DASHBOARD
---  ─────────────
---  ERM_KRI                         .APP_USER_ID                     → ERM_APP_USER.APP_USER_ID
---  ERM_KRI_DATA_POINT              .KRI_ID                          → ERM_KRI.KRI_ID
---
---  EMPLOYER MANAGEMENT
---  ───────────────────
---  ERM_EMPLOYER_RELATIONSHIP       .EMPLOYER_ID                     → ERM_EMPLOYER.EMPLOYER_ID
---  ERM_EMPLOYER_RELATIONSHIP       .RELATED_EMPLOYER_ID             → ERM_EMPLOYER.EMPLOYER_ID
---
--- ════════════════════════════════════════════════════════════
---  END OF DATA MODEL
--- ════════════════════════════════════════════════════════════
+================================================================================
+ENTERPRISE RISK MANAGEMENT (ERM) APPLICATION - DATA MODEL
+================================================================================
+
+Version: 2.0
+Last Updated: 2026-05-01
+Architecture: React + TypeScript with localStorage persistence
+Design System: Appian SAIL (Self-Assembling Interface Layer)
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. ARCHITECTURE OVERVIEW
+2. DATA PERSISTENCE STRATEGY
+3. CORE ENTITIES
+   3.1  Risk Management
+   3.2  Process Management
+   3.3  Vendor Management
+   3.4  Regulatory Compliance
+   3.5  Control Management
+   3.6  Configuration & Reference Data
+4. MANY-TO-MANY RELATIONSHIPS
+5. LOCALSTORAGE KEYS REFERENCE
+6. TYPESCRIPT INTERFACE REFERENCE
+
+================================================================================
+1. ARCHITECTURE OVERVIEW
+================================================================================
+
+Technology Stack:
+- Frontend: React 18+ with TypeScript
+- Styling: Tailwind CSS v4 with CSS variables
+- Routing: react-router (NOT react-router-dom)
+- State Management:
+  * AppContext (React Context) for vendors (in-memory)
+  * localStorage for all other entities
+- Font: Open Sans (via --font-family-primary CSS variable)
+
+Data Persistence:
+- All entities except Vendors: localStorage with versioned keys
+- Vendors only: In-memory state via AppContext
+- No backend database
+- No API calls (all CRUD operations are client-side)
+
+Design Philosophy:
+- Follows Appian SAIL design guidelines
+- All styling uses CSS variables (never arbitrary Tailwind values)
+- Labels above fields, red asterisk for required fields
+- Auto-save for sub-processes when user enters data
+- Bidirectional many-to-many relationship updates
+
+================================================================================
+2. DATA PERSISTENCE STRATEGY
+================================================================================
+
+LocalStorage Keys (Versioned):
+--------------------------------------------------
+Entity                          Key
+--------------------------------------------------
+Processes                       erm_processes_v2
+Risks                           erm_risks_v1
+Risk Categories                 erm_risk_categories_v1
+Employers                       erm_employers_v1
+Employer Relationships          erm_employer_relationships_v1
+Regulations                     erm_regulations_v1
+Regulation Documents            erm_regulation_documents_v1
+Regulation Comments             erm_regulation_comments_v1
+Compliance Requirements         erm_compliance_requirements_v1
+Regulatory Frameworks           erm_regulatory_frameworks_v1
+Regulatory Audits               erm_regulatory_audits_v1
+Regulatory Events               erm_regulatory_events_v1
+Bills                           erm_bills_v1
+Bill Amendments                 erm_bill_amendments_v1
+Bill Votes                      erm_bill_votes_v1
+Bill Comments                   erm_bill_comments_v1
+Controls                        erm_controls_v1
+Compliance Frameworks           erm_compliance_frameworks_v1
+Products                        erm_products_v1
+Key Risk Indicators (KRI)       erm_kris_v1
+
+Configuration:
+Classification Categories       erm_classification_categories_v1
+Classification Levels           erm_vendor_classification_levels_v1
+Vendor Levels                   erm_vendor_levels_v1
+Checklist Items                 erm_checklist_items_v1
+
+Junction Tables (Many-to-Many):
+Process-Risk Links              erm_process_risk_links_v1
+Process-Control Links           erm_process_control_links_v1
+Risk-Vendor Links               erm_risk_vendor_links_v1
+Risk-Control Links              erm_risk_control_links_v1
+Risk Assessments                erm_risk_assessments_v1
+Risk Mitigation Actions         erm_risk_mitigation_actions_v1
+Control-Requirement Links       erm_control_requirement_mappings_v1
+Regulation-Control Links        erm_regulation_control_links_v1
+Regulation-Requirement Links    erm_regulation_requirement_links_v1
+Framework-Requirement Links     erm_framework_requirement_links_v1
+Checklist-Level Associations    erm_checklist_level_associations_v1
+
+In-Memory Only (AppContext):
+--------------------------------------------------
+Vendors                         (not persisted)
+Contracts                       (not persisted)
+Activity Items                  (not persisted)
+Vendor Contacts                 (not persisted)
+Config Options                  (not persisted)
+
+================================================================================
+3. CORE ENTITIES
+================================================================================
+
+3.1 RISK MANAGEMENT
+================================================================================
+
+RISK
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "RSK-001")
+  categoryId          : string           // References RiskCategory.id - classifies the risk into a domain (e.g., Information Security, Financial)
+  department          : string           // Business department that owns or is primarily affected by this risk
+  owner               : AppUser | null   // Risk owner responsible for monitoring and managing the risk
+  title               : string           // Concise risk title or name
+  description         : string           // Detailed description of the risk scenario, potential causes, and impacts
+  status              : RiskStatus       // Current lifecycle status: 'draft' | 'active' | 'closed' | 'archived'
+  riskType            : RiskType         // Nature of the risk: 'strategic' | 'operational' | 'financial' | 'compliance' | 'reputational' | 'cyber'
+  appetiteLevel       : AppetiteLevel    // Organization's tolerance for this risk: 'averse' | 'minimal' | 'cautious' | 'open' | 'hungry'
+  reviewFrequency     : ReviewFrequency  // How often this risk should be reviewed: 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
+  nextReviewDate      : string           // ISO date when the next risk review is scheduled
+  isEnterpriseRisk    : boolean          // True if this is a top-tier enterprise-level risk visible to executive leadership
+  enterpriseRiskId    : string | null    // For departmental risks: optional link to parent enterprise-level risk (references another Risk.id)
+  createdAt           : string           // ISO date when risk was first identified and recorded
+  createdBy           : string           // Name of person who created the risk record
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated the risk record
+
+Storage Key: erm_risks_v1
+ID Pattern: RSK-###
+Relationships:
+  - Many-to-Many with Process (via erm_process_risk_links_v1)
+  - Many-to-Many with Vendor (via erm_risk_vendor_links_v1)
+  - Many-to-Many with Control (via erm_risk_control_links_v1)
+  - One-to-Many with RiskAssessment
+  - One-to-Many with RiskMitigationAction
+
+
+RISK_CATEGORY
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "RCAT-001")
+  name                : string           // Display name of the risk category (e.g., "Information Security")
+  code                : string           // Short abbreviation or code for the category (e.g., "IS")
+  description         : string           // Detailed explanation of what types of risks belong in this category
+  colorHex            : string           // Display color for this category in hex format (e.g., "#C0392B") for UI badges and charts
+  parentCategoryId    : string | null    // References another RiskCategory.id for hierarchical/nested categories (null for top-level)
+  sortOrder           : number           // Display order sequence for consistent UI presentation
+
+Storage Key: erm_risk_categories_v1
+ID Pattern: RCAT-###
+
+Seed Categories:
+  - RCAT-001: Information Security
+  - RCAT-002: Data Privacy (child of RCAT-001)
+  - RCAT-003: Regulatory Compliance
+  - RCAT-004: Financial Reporting
+  - RCAT-005: Third-Party / Vendor
+  - RCAT-006: Business Continuity
+  - RCAT-007: Talent & Workforce
+
+
+RISK_ASSESSMENT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "ASM-001")
+  riskId              : string           // References Risk.id - the risk being assessed
+  assessmentType      : 'periodic' | 'triggered' | 'ad_hoc'  // Reason for assessment: scheduled periodic review, event-triggered, or one-time ad hoc
+  assessmentDate      : string           // ISO date when the assessment was conducted
+  likelihood          : number           // Probability of risk occurring on 1-5 scale (1=very unlikely, 5=very likely)
+  impact              : number           // Severity of consequences on 1-5 scale (1=minimal, 5=catastrophic)
+  riskRating          : 'critical' | 'high' | 'medium' | 'low' | 'negligible'  // Calculated overall rating based on likelihood × impact
+  assessmentNotes     : string           // Detailed findings, methodology, assumptions, and rationale for scoring
+  assessor            : AppUser | null   // Person who conducted the assessment
+  reviewedBy          : AppUser | null   // Person who reviewed and approved the assessment (e.g., risk manager)
+  reviewDate          : string | null    // ISO date when the assessment was reviewed/approved
+  createdAt           : string           // ISO date when assessment record was created
+  updatedAt           : string           // ISO date of most recent modification
+
+Storage Key: erm_risk_assessments_v1
+ID Pattern: ASM-###
+
+
+RISK_MITIGATION_ACTION
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "MIT-001")
+  riskId              : string           // References Risk.id - the risk this action addresses
+  actionType          : 'mitigate' | 'accept' | 'transfer' | 'avoid'  // Risk treatment strategy: reduce likelihood/impact, accept as-is, transfer to third party, or eliminate
+  status              : 'open' | 'in_progress' | 'complete' | 'deferred' | 'cancelled'  // Current state of the mitigation action
+  priority            : 'critical' | 'high' | 'medium' | 'low'  // Urgency level for completing this action
+  description         : string           // Detailed explanation of the mitigation action, steps to be taken, and expected outcome
+  owner               : AppUser | null   // Person responsible for implementing and tracking the action
+  dueDate             : string           // ISO date when action should be completed
+  completionDate      : string | null    // ISO date when action was actually completed (null if not yet complete)
+  costEstimate        : number | null    // Estimated financial cost to implement the action (null if not applicable)
+  actualCost          : number | null    // Actual financial cost incurred (null until action is complete)
+  notes               : string           // Additional context, dependencies, challenges, or status updates
+  createdAt           : string           // ISO date when mitigation action was created
+  createdBy           : string           // Name of person who created the action
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated the action
+
+Storage Key: erm_risk_mitigation_actions_v1
+ID Pattern: MIT-###
+
+
+3.2 PROCESS MANAGEMENT
+================================================================================
+
+PROCESS
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "PRC-001")
+  name                : string           // Process name (e.g., "Vendor Onboarding", "Contract Lifecycle Management")
+  shortDescription    : string           // Brief one-sentence summary of what the process does
+  purpose             : string           // Detailed explanation of why this process exists and what business objective it serves
+  scope               : string           // Boundaries defining what is included/excluded from this process
+  businessDomain      : string           // Business area or department (e.g., "Procurement", "Legal", "Risk Management")
+  tags                : string[]         // Keyword labels for categorization and search (e.g., ["Compliance", "Onboarding"])
+  owner               : AppUser | null   // Process owner accountable for effectiveness and updates
+  status              : ProcessStatus    // Current state: 'Draft' (being designed), 'Active' (in use), 'Retired' (no longer used)
+  effectiveStartDate  : string           // ISO date when process became or will become active
+  effectiveEndDate    : string           // ISO date when process expires or was retired (empty if currently active)
+  subProcesses        : SubProcess[]     // Array of embedded sub-processes that make up this process workflow
+  dependsOnProcessIds : string[]         // Array of Process.id values this process depends on or must follow
+  createdDate         : string           // ISO date when process was first created
+  updatedDate         : string           // ISO date when process was last modified
+
+Storage Key: erm_processes_v2
+ID Pattern: PRC-###
+Relationships:
+  - Many-to-Many with Risk (via erm_process_risk_links_v1)
+  - Many-to-Many with Control (via erm_process_control_links_v1)
+
+
+SUBPROCESS (Embedded in Process)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique identifier for this sub-process (e.g., "SUB-001A")
+  name                : string           // Name of this sub-process phase (e.g., "Vendor Application Review", "Due Diligence")
+  description         : string           // Detailed description of what happens in this sub-process
+  objective           : string           // Specific goal or deliverable this sub-process achieves
+  boundaryStart       : string           // Trigger or entry condition that initiates this sub-process (e.g., "Vendor submits application")
+  boundaryEnd         : string           // Exit condition or completion state (e.g., "Application marked as complete or rejected")
+  owner               : AppUser | null   // Person responsible for this sub-process phase
+  tags                : string[]         // Keywords for categorization (e.g., ["Screening", "Documentation"])
+  steps               : Step[]           // Ordered array of embedded steps that comprise this sub-process workflow
+
+ID Pattern: SUB-###[A-Z]
+
+Note: Sub-processes are stored as embedded objects within the parent Process.
+      They represent major phases or logical groupings of steps.
+
+
+STEP (Embedded in SubProcess)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique identifier for this step (e.g., "STP-001A1")
+  type                : StepType         // Step type: 'Task' (action to perform), 'Decision' (branching point), 'Hand-off' (transfer to another team)
+  description         : string           // Clear description of what action is performed in this step
+  input               : string           // What information, documents, or conditions are required to start this step
+  output              : string           // What is produced or delivered when this step completes
+  entryCriteria       : string           // Conditions that must be met before this step can begin
+  exitCriteria        : string           // Conditions that must be met to consider this step complete
+  systemTool          : string           // Software or tool used to execute this step (e.g., "Appian Process", "DocuSign", "Excel")
+  responsibleRole     : string           // Job role or title of the person who performs this step (e.g., "Vendor Coordinator", "Legal Counsel")
+  sortOrder           : number           // Sequence number for ordering steps within the sub-process
+  linkedStepIds       : string[]         // Array of Step.id values representing the next step(s) in the workflow (for branching/parallel paths)
+
+ID Pattern: STP-###[A-Z][0-9]
+
+Note: Steps are stored as embedded objects within SubProcess.
+      They represent individual tasks, decisions, or handoffs in the workflow.
+
+
+3.3 VENDOR MANAGEMENT
+================================================================================
+
+VENDOR (In-Memory via AppContext)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "VEN-001")
+  code                : string           // Business-readable unique vendor code for reference and reporting
+  name                : string           // Legal or business name of the vendor organization
+  category            : string           // Vendor category/type (from Configuration: Business Services, Software/Hardware, etc.)
+  status              : string           // Current vendor relationship status (from Configuration: Active, Inactive, Pending Review, etc.)
+  contactName         : string           // Full name of primary vendor contact person
+  contactEmail        : string           // Primary contact's email address
+  contactPhone        : string           // Primary contact's phone number
+  addressLine1        : string           // First line of vendor's physical business address
+  addressLine2        : string           // Second line of address (suite number, building, floor, etc.)
+  city                : string           // City where vendor is located
+  state               : string           // State, province, or region where vendor is located
+  zipCode             : string           // Postal code or ZIP code
+  country             : string           // Country where vendor is headquartered or operates
+  website             : string           // Vendor's primary website URL
+  notes               : string           // Free-form internal notes, observations, or special instructions about the vendor
+  productIds          : string[]         // Array of Product IDs that this vendor provides or supports (many-to-many relationship)
+  classificationScore : number | null    // Auto-calculated risk score (0-100) based on weighted classification category levels
+  vendorLevelId       : string | null    // Auto-assigned vendor tier/level ID based on classification score thresholds (references VendorLevel.id)
+  createdDate         : string           // ISO date when vendor record was first created
+  updatedDate         : string           // ISO date when vendor record was last modified
+
+Storage: In-memory only (AppContext)
+ID Pattern: VEN-###
+Relationships:
+  - Many-to-Many with Risk (via erm_risk_vendor_links_v1)
+  - Many-to-Many with Product (via productIds field)
+  - Many-to-One with VendorLevel (via vendorLevelId)
+
+
+VENDOR_LEVEL
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "VL-001")
+  levelNumber         : number           // Tier number (typically 1-5, with 5 being highest risk/criticality)
+  levelName           : string           // Display name for this vendor tier (e.g., "Critical Vendor", "High Risk Vendor")
+  description         : string           // Detailed explanation of what qualifies a vendor for this level and oversight requirements
+  minScore            : number           // Minimum classification score (0-100) required for auto-assignment to this level
+  maxScore            : number           // Maximum classification score (0-100) for this level (ranges must not overlap)
+  color               : string           // Display color for UI badges and charts (CSS variable or hex code)
+  sortOrder           : number           // Display order sequence
+  createdAt           : string           // ISO date when level was created
+  createdBy           : string           // Name of person who created this level
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this level
+
+Storage Key: erm_vendor_levels_v1
+ID Pattern: VL-###
+
+Seed Levels:
+  - VL-001: Critical Vendor (80-100)
+  - VL-002: High Risk Vendor (60-79)
+  - VL-003: Moderate Risk Vendor (40-59)
+  - VL-004: Low Risk Vendor (20-39)
+  - VL-005: Minimal Risk Vendor (0-19)
+
+
+VENDOR_CLASSIFICATION (Category)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "VCLS-001")
+  title               : string           // Name of classification category (e.g., "Vendor Risk Assessment", "Data Security Classification")
+  description         : string           // Explanation of what this classification category evaluates
+  weight              : number           // Percentage weight (0-100) this category contributes to overall vendor classification score
+  createdAt           : string           // ISO date when classification category was created
+  createdBy           : string           // Name of person who created this category
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this category
+
+Storage Key: erm_classification_categories_v1
+ID Pattern: VCLS-###
+
+Note: Weights across all active classifications must sum to exactly 100%.
+      Each vendor's overall classification score is calculated as the weighted
+      average of their scores across all classification categories.
+
+
+VENDOR_CLASSIFICATION_LEVEL (Scoring Matrix)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "VCL-001")
+  classificationId    : string           // References VendorClassification.id - the parent classification category
+  levelNumber         : number           // Level tier (typically 1-5, with 5 being highest exposure/risk)
+  levelLabel          : string           // Display label for this level (e.g., "Level 5 - High Exposure", "Level 3 - Moderate Exposure")
+  description         : string           // Detailed criteria defining when a vendor qualifies for this level (e.g., spend thresholds, data access, criticality)
+  score               : number           // Point value (0-100) assigned to vendors at this level for weighted score calculation
+  sortOrder           : number           // Display order sequence
+  createdAt           : string           // ISO date when level was created
+  createdBy           : string           // Name of person who created this level
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this level
+
+Storage Key: erm_vendor_classification_levels_v1
+ID Pattern: VCL-###
+
+Note: Each classification category has multiple levels (scoring bands). When a vendor
+      is assessed, they are assigned a level within each category, and that level's
+      score is weighted to calculate their overall classification score.
+
+
+CHECKLIST_ITEM
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "CHK-001")
+  name                : string           // Name of the compliance or oversight activity (e.g., "Annual Risk Assessment", "Security Audit")
+  description         : string           // Detailed explanation of what this checklist item entails and how to complete it
+  category            : string           // Grouping category for organization (e.g., "Compliance", "Security", "Financial", "Performance", "Operational")
+  createdAt           : string           // ISO date when checklist item was created
+  createdBy           : string           // Name of person who created this item
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this item
+
+Storage Key: erm_checklist_items_v1
+ID Pattern: CHK-###
+Relationships:
+  - Many-to-Many with VendorLevel (via erm_checklist_level_associations_v1)
+
+Note: Checklist items represent vendor oversight activities that can be assigned
+      to vendor levels as either required or optional.
+
+
+VENDOR_LEVEL_CHECKLIST_ASSOCIATION
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "VLCA-001")
+  checklistItemId     : string           // References ChecklistItem.id - the compliance/oversight activity
+  vendorLevelId       : string           // References VendorLevel.id - the vendor tier this applies to
+  status              : 'required' | 'optional'  // Whether this checklist item is mandatory or optional for vendors at this level
+  createdAt           : string           // ISO date when association was created
+  createdBy           : string           // Name of person who created this association
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this association
+
+Storage Key: erm_checklist_level_associations_v1
+ID Pattern: VLCA-###
+
+Note: This junction table creates many-to-many relationships between checklist items
+      and vendor levels. For example, "Critical Vendors" (VL-001) might require
+      annual security audits, while "Low Risk Vendors" (VL-004) might have it as optional.
+
+
+CONTRACT (In-Memory via AppContext)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "CON-001")
+  vendorId            : string           // References Vendor.id - the vendor this contract is with
+  title               : string           // Contract name or description
+  type                : string           // Contract type from Configuration (e.g., "Master Service Agreement", "Statement of Work", "NDA", "Amendment")
+  status              : string           // Contract status from Configuration (e.g., "Active", "Expired", "Pending", "Renewal Due", "Terminated")
+  startDate           : string           // ISO date when contract becomes effective
+  endDate             : string           // ISO date when contract expires
+  renewalDate         : string           // ISO date when contract is up for renewal review
+  value               : number           // Total contract value in currency units
+  autoRenew           : boolean          // True if contract automatically renews unless terminated
+  notes               : string           // Additional context, special terms, or internal notes about the contract
+  createdDate         : string           // ISO date when contract record was created
+  updatedDate         : string           // ISO date when contract record was last modified
+
+Storage: In-memory only (AppContext)
+ID Pattern: CON-###
+
+Note: Contracts are managed in-memory and not persisted to localStorage.
+      Each contract must be associated with a vendor.
+
+
+VENDOR_CONTACT (In-Memory via AppContext)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "COT-001")
+  vendorId            : string           // References Vendor.id - the vendor this contact is associated with
+  name                : string           // Full name of the contact person
+  type                : 'External' | 'Internal'  // Contact type: External (vendor employee) or Internal (our employee managing vendor)
+  email               : string           // Contact's email address
+  phone               : string           // Contact's phone number
+  title               : string           // Job title or role of the contact person
+  isPrimary           : boolean          // True if this is the primary/main contact for the vendor
+
+Storage: In-memory only (AppContext)
+ID Pattern: COT-###
+
+Note: A vendor can have multiple contacts. Contacts can be external vendor
+      representatives or internal employees who manage the vendor relationship.
+      The isPrimary flag designates the main point of contact.
+
+
+3.4 REGULATORY COMPLIANCE
+================================================================================
+
+REGULATION
+--------------------------------------------------
+Fields:
+  id                      : string       // Unique system identifier (e.g., "REG-001")
+  regulationNumber        : string       // Official regulation identifier (e.g., "HR-1234", "EU-GDPR-2016/679", "21 CFR Part 11")
+  title                   : string       // Full official title of the regulation
+  description             : string       // Detailed explanation of what the regulation covers and requires
+  regulatoryBody          : string       // Government agency or body that issued the regulation (e.g., "SEC", "EU Parliament", "FDA", "FINRA")
+  jurisdiction            : string       // Geographic or legal scope (e.g., "Federal - USA", "EU", "California", "New York State")
+  category                : string       // Regulation type from Configuration (e.g., "Financial", "Privacy", "Safety", "Environmental")
+  impactLevel             : 'critical' | 'high' | 'medium' | 'low'  // Assessment of business impact severity
+  status                  : RegulationStatus  // Our internal tracking status: monitoring, in-review, in-progress, compliant, non-compliant, not-applicable, archived
+  stage                   : RegulationStage   // Regulation's legislative lifecycle: proposed, committee, passed, effective, amended, repealed
+  proposedDate            : string | null     // ISO date when regulation was first proposed
+  publicationDate         : string | null     // ISO date when regulation was officially published
+  effectiveDate           : string | null     // ISO date when regulation becomes/became enforceable
+  complianceDeadline      : string | null     // Internal deadline for achieving compliance (may differ from effective date)
+  reviewDate              : string | null     // Next scheduled date for reviewing compliance status
+  primaryOwner            : AppUser | null    // Compliance officer or subject matter expert responsible for this regulation
+  stakeholders            : AppUser[]         // Cross-functional team members involved in compliance efforts
+  department              : string            // Primary business department affected or responsible
+  relatedBillIds          : string[]          // Array of Bill.id values for legislation that created or modified this regulation
+  linkedControlIds        : string[]          // Array of Control.id values - controls that help achieve compliance (also linked via junction table)
+  supersedes              : string | null     // References Regulation.id of previous regulation this replaces
+  supersededBy            : string | null     // References Regulation.id of newer regulation that replaces this one
+  complianceStatus        : ComplianceStatus  // Progress toward compliance: not-started, assessment, planning, implementing, testing, compliant, partial, non-compliant
+  gapAnalysisCompleted    : boolean           // True if gap analysis has been performed to identify compliance deficiencies
+  readinessScore          : number            // Assessment of compliance readiness on 0-100 scale
+  estimatedCost           : number | null     // Projected financial cost to achieve compliance (null if not estimated)
+  officialUrl             : string | null     // Link to official regulation text or government website
+  attachmentIds           : string[]          // Array of document IDs for related materials (guidance, interpretations, etc.)
+  tags                    : string[]          // Keywords for categorization and search
+  createdAt               : string            // ISO date when regulation record was created
+  createdBy               : string            // Name of person who created the record
+  updatedAt               : string            // ISO date of most recent modification
+  updatedBy               : string            // Name of person who last updated the record
+
+Storage Key: erm_regulations_v1
+ID Pattern: REG-###
+
+Enums:
+  RegulationStatus: 'monitoring' | 'in-review' | 'in-progress' | 'compliant' |
+                    'non-compliant' | 'not-applicable' | 'archived'
+
+  RegulationStage: 'proposed' | 'committee' | 'passed' | 'effective' |
+                   'amended' | 'repealed'
+
+  ComplianceStatus: 'not-started' | 'assessment' | 'planning' | 'implementing' |
+                    'testing' | 'compliant' | 'partial' | 'non-compliant'
+
+Relationships:
+  - Many-to-Many with Control (via erm_regulation_control_links_v1)
+  - Many-to-Many with ComplianceRequirement (via erm_regulation_requirement_links_v1)
+
+
+REGULATION_DOCUMENT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "RDOC-001")
+  regulationId        : string           // References Regulation.id - the regulation this document relates to
+  title               : string           // Document name or description
+  documentType        : string           // Type of document (e.g., "Official Text", "Guidance", "Interpretation", "Internal Analysis")
+  uploadDate          : string           // ISO date when document was uploaded
+  uploadedBy          : string           // Name of person who uploaded the document
+  fileUrl             : string           // Storage path or URL to the document file
+  fileSize            : number           // File size in bytes
+  notes               : string           // Additional context or description of the document
+
+Storage Key: erm_regulation_documents_v1
+ID Pattern: RDOC-###
+
+Note: Stores references to supporting documentation for regulations.
+
+
+REGULATION_COMMENT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "RCOM-001")
+  regulationId        : string           // References Regulation.id - the regulation being discussed
+  author              : AppUser | null   // Person who wrote the comment
+  commentText         : string           // Content of the comment or discussion note
+  commentDate         : string           // ISO date when comment was posted
+  isInternal          : boolean          // True if comment is for internal use only, false if shareable externally
+
+Storage Key: erm_regulation_comments_v1
+ID Pattern: RCOM-###
+
+Note: Provides a discussion thread or audit trail for regulation-related communications.
+
+
+COMPLIANCE_REQUIREMENT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "REQ-001")
+  requirementNumber   : string           // Business reference number or code for this requirement
+  title               : string           // Concise name of the compliance obligation
+  description         : string           // Detailed explanation of what must be done to meet this requirement
+  category            : string           // Classification from Configuration (e.g., "Data Protection", "Access Control", "Audit & Reporting")
+  complianceStatus    : ComplianceStatus // Progress: not-started, assessment, planning, implementing, testing, compliant, partial, non-compliant
+  assignedOwner       : AppUser | null   // Person responsible for ensuring this requirement is met
+  dueDate             : string | null    // Target date for achieving compliance (ISO date)
+  completionDate      : string | null    // Actual date compliance was achieved (ISO date, null if not complete)
+  notes               : string           // Implementation details, challenges, dependencies, or status updates
+  createdAt           : string           // ISO date when requirement was created
+  createdBy           : string           // Name of person who created this requirement
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this requirement
+
+Storage Key: erm_compliance_requirements_v1
+ID Pattern: REQ-###
+Relationships:
+  - Many-to-Many with Regulation (via erm_regulation_requirement_links_v1)
+  - Many-to-Many with RegulatoryFramework (via erm_framework_requirement_links_v1)
+  - Many-to-Many with Control (via erm_control_requirement_mappings_v1)
+
+Note: Requirements are granular compliance obligations that can be linked to multiple
+      regulations, frameworks, and controls. They represent specific actions needed.
+
+
+REGULATORY_FRAMEWORK
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "FW-001")
+  frameworkCode       : string           // Short code or abbreviation (e.g., "GDPR", "SOX", "HIPAA", "PCI-DSS")
+  name                : string           // Full framework name (e.g., "General Data Protection Regulation", "Sarbanes-Oxley Act")
+  description         : string           // Overview of what this framework governs and its purpose
+  governingBody       : string           // Organization or authority that maintains the framework (e.g., "EU Commission", "SEC")
+  jurisdiction        : string           // Geographic or industry scope (e.g., "EU", "US Public Companies", "Healthcare Industry")
+  effectiveDate       : string           // ISO date when framework became effective
+  lastReviewDate      : string | null    // Most recent date framework compliance was reviewed (ISO date)
+  nextReviewDate      : string | null    // Scheduled date for next compliance review (ISO date)
+  status              : 'active' | 'archived'  // Whether framework is currently applicable or no longer relevant
+  createdAt           : string           // ISO date when framework record was created
+  createdBy           : string           // Name of person who created this record
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this record
+
+Storage Key: erm_regulatory_frameworks_v1
+ID Pattern: FW-###
+Relationships:
+  - Many-to-Many with ComplianceRequirement (via erm_framework_requirement_links_v1)
+
+Note: Frameworks represent comprehensive regulatory regimes (like GDPR, SOX) that
+      encompass multiple individual requirements.
+
+
+REGULATORY_AUDIT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "RAUD-001")
+  auditNumber         : string           // Official audit reference number
+  title               : string           // Name or focus of the audit (e.g., "2025 GDPR Compliance Audit", "SOX Controls Assessment")
+  auditType           : string           // Type from Configuration (e.g., "Internal", "External", "Regulatory", "Certification")
+  auditor             : string           // Name of auditing firm or individual auditor
+  auditDate           : string           // ISO date when audit was conducted
+  status              : string           // Audit status from Configuration (e.g., "Scheduled", "In Progress", "Complete", "Remediation Required")
+  findings            : string           // Summary of audit findings, issues identified, or deficiencies discovered
+  recommendations     : string           // Auditor's recommendations for remediation or improvement
+  dueDate             : string | null    // Target date for completing remediation actions (ISO date)
+  completionDate      : string | null    // Actual date all remediation was completed (ISO date, null if in progress)
+  relatedRegulationIds: string[]         // Array of Regulation.id values this audit covers
+  relatedFrameworkIds : string[]         // Array of RegulatoryFramework.id values this audit assesses
+  assignedOwner       : AppUser | null   // Person responsible for coordinating remediation efforts
+  notes               : string           // Additional context, follow-up actions, or status updates
+  createdAt           : string           // ISO date when audit record was created
+  createdBy           : string           // Name of person who created this record
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this record
+
+Storage Key: erm_regulatory_audits_v1
+ID Pattern: RAUD-###
+
+Note: Tracks formal audits conducted to assess compliance with regulations and frameworks.
+
+
+REGULATORY_EVENT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "REVT-001")
+  eventType           : string           // Event category from Configuration (e.g., "Regulation Effective", "Amendment Proposed", "Enforcement Action", "Deadline Extension")
+  eventDate           : string           // ISO date when event occurred or will occur
+  title               : string           // Brief name of the event
+  description         : string           // Detailed explanation of what happened and implications
+  impactLevel         : 'critical' | 'high' | 'medium' | 'low'  // Assessment of how significantly this event affects the organization
+  affectedRegulationIds: string[]        // Array of Regulation.id values impacted by this event
+  affectedFrameworkIds: string[]         // Array of RegulatoryFramework.id values impacted by this event
+  assignedOwner       : AppUser | null   // Person responsible for assessing impact and coordinating response
+  actionRequired      : boolean          // True if this event requires organizational action or response
+  actionDueDate       : string | null    // Deadline for completing required actions (ISO date)
+  actionCompleted     : boolean          // True if all required actions have been completed
+  notes               : string           // Impact analysis, response plans, or additional context
+  createdAt           : string           // ISO date when event record was created
+  createdBy           : string           // Name of person who created this record
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this record
+
+Storage Key: erm_regulatory_events_v1
+ID Pattern: REVT-###
+
+Note: Tracks significant regulatory changes, announcements, or developments that
+      may affect compliance obligations or strategy.
+
+
+BILL
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "BILL-001")
+  billNumber          : string           // Official legislative identifier (e.g., "H.R. 1234", "S.B. 567", "AB-123")
+  title               : string           // Full title of the bill
+  summary             : string           // Brief description of what the bill would do if passed
+  legislature         : string           // Legislative body considering the bill (e.g., "117th Congress", "California State Assembly", "New York Senate")
+  sponsor             : string           // Primary sponsor's name (legislator who introduced the bill)
+  introducedDate      : string           // ISO date when bill was first introduced
+  status              : BillStatus       // Current legislative stage (see enum below)
+  currentCommittee    : string | null    // Name of committee currently reviewing the bill (null if not in committee)
+  regulationId        : string | null    // References Regulation.id - created when bill is signed into law (null until passed)
+  relatedRegulationIds: string[]         // Array of existing Regulation.id values this bill would modify or affect
+  amendments          : BillAmendment[]  // Array of embedded amendment records proposed to this bill
+  votes               : BillVote[]       // Array of embedded voting records from various legislative stages
+  priority            : 'critical' | 'high' | 'medium' | 'low'  // Internal assessment of importance for tracking
+  trackingNotes       : string           // Internal analysis, lobbying strategy, or impact assessment
+  primaryContact      : AppUser | null   // Person responsible for monitoring this bill's progress
+  stakeholders        : AppUser[]        // Cross-functional team members with interest in this bill
+  createdAt           : string           // ISO date when bill record was created
+  createdBy           : string           // Name of person who created this record
+  updatedAt           : string           // ISO date of most recent modification
+  updatedBy           : string           // Name of person who last updated this record
+
+Storage Key: erm_bills_v1
+ID Pattern: BILL-###
+
+BillStatus: 'introduced' | 'in-committee' | 'committee-passed' | 'floor-debate' |
+            'passed-chamber' | 'other-chamber' | 'conference' | 'passed-both' |
+            'signed' | 'vetoed' | 'failed'
+
+Note: Bills represent proposed legislation being tracked. Once signed into law,
+      they may become Regulation records.
+
+
+BILL_AMENDMENT (Embedded in Bill)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique identifier for this amendment
+  amendmentNumber     : string           // Official amendment number or identifier
+  description         : string           // Summary of what the amendment changes or adds
+  proposedDate        : string           // ISO date when amendment was proposed
+  status              : 'proposed' | 'adopted' | 'rejected'  // Current state of the amendment
+  impact              : string           // Assessment of how this amendment would affect the organization
+
+Storage: Embedded in Bill.amendments array
+
+Note: Amendments are stored as nested objects within bills, tracking proposed
+      changes to the bill's text during the legislative process.
+
+
+BILL_VOTE (Embedded in Bill)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique identifier for this vote record
+  chamber             : string           // Legislative chamber where vote occurred (e.g., "House", "Senate", "Assembly")
+  voteDate            : string           // ISO date when vote was held
+  result              : 'passed' | 'failed'  // Outcome of the vote
+  votesFor            : number           // Count of affirmative votes
+  votesAgainst        : number           // Count of negative votes
+  votesAbstained      : number           // Count of abstentions or present-not-voting
+
+Storage: Embedded in Bill.votes array
+
+Note: Votes are stored as nested objects within bills, creating a timeline of
+      voting outcomes as the bill progresses through the legislative process.
+
+
+BILL_COMMENT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "BCOM-001")
+  billId              : string           // References Bill.id - the bill being discussed
+  author              : AppUser | null   // Person who wrote the comment
+  commentText         : string           // Content of the comment or analysis
+  commentDate         : string           // ISO date when comment was posted
+  isInternal          : boolean          // True if comment is for internal use only, false if shareable externally
+
+Storage Key: erm_bill_comments_v1
+ID Pattern: BCOM-###
+
+Note: Provides internal discussion and analysis thread for bills being tracked.
+
+
+3.5 CONTROL MANAGEMENT
+================================================================================
+
+CONTROL
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "CTL-001")
+  owner               : AppUser | null   // Person responsible for executing or monitoring this control
+  department          : string           // Business department that operates this control
+  name                : string           // Concise name of the control activity
+  description         : string           // Detailed explanation of what the control does and how it operates
+  controlType         : ControlType      // Nature of control: preventive, detective, corrective, directive, or compensating
+  frequency           : ControlFrequency // How often control is executed: continuous, daily, weekly, monthly, quarterly, annual
+  effectiveness       : ControlEffectiveness  // Most recent assessment: effective, partially_effective, ineffective, not_tested
+  isAutomated         : boolean          // True if control is automated/system-enforced, false if manual
+  lastTestedDate      : string           // ISO date when control effectiveness was last tested
+  nextTestDate        : string           // ISO date when next control test is scheduled
+  status              : ControlStatus    // Current state: active, inactive, in_design, deprecated
+  frameworkRef        : string           // Reference to external control framework (e.g., "NIST 800-53 AC-2", "ISO 27001 A.9.2.1")
+  createdAt           : string           // ISO date when control was created
+  updatedAt           : string           // ISO date of most recent modification
+
+Storage Key: erm_controls_v1
+ID Pattern: CTL-###
+
+Enums:
+  ControlType: 'preventive' (prevents issues before they occur) |
+               'detective' (identifies issues after they occur) |
+               'corrective' (fixes issues that occurred) |
+               'directive' (mandates specific actions) |
+               'compensating' (alternative when primary control unavailable)
+
+  ControlFrequency: 'continuous' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'annual'
+
+  ControlEffectiveness: 'effective' | 'partially_effective' | 'ineffective' | 'not_tested'
+
+  ControlStatus: 'active' | 'inactive' | 'in_design' | 'deprecated'
+
+Relationships:
+  - Many-to-Many with Process (via erm_process_control_links_v1)
+  - Many-to-Many with Risk (via erm_risk_control_links_v1)
+  - Many-to-Many with ComplianceRequirement (via erm_control_requirement_mappings_v1)
+  - Many-to-Many with Regulation (via erm_regulation_control_links_v1)
+
+Note: Controls are activities or mechanisms designed to mitigate risks and ensure
+      compliance with regulations and requirements.
+
+
+COMPLIANCE_FRAMEWORK
+--------------------------------------------------
+Fields:
+  id                      : string       // Unique system identifier (e.g., "FWK-001")
+  name                    : string       // Framework name (e.g., "SOC 2 Type II", "ISO 27001", "NIST Cybersecurity Framework")
+  version                 : string       // Version or edition of the framework (e.g., "2013", "v2.0")
+  governingBody           : string       // Organization that maintains the framework (e.g., "AICPA", "ISO", "NIST")
+  status                  : 'active' | 'sunset' | 'draft'  // Whether framework is actively used, being phased out, or under development
+  certificationRequired   : boolean      // True if organization must obtain formal certification/attestation
+  effectiveDate           : string       // ISO date when framework compliance became effective
+  nextAssessmentDate      : string       // ISO date of next scheduled audit or assessment
+  description             : string       // Overview of what this framework covers and why it's important
+  createdAt               : string       // ISO date when framework record was created
+  updatedAt               : string       // ISO date of most recent modification
+
+Storage Key: erm_compliance_frameworks_v1
+ID Pattern: FWK-###
+
+Note: Distinct from REGULATORY_FRAMEWORK - this entity tracks compliance and
+      certification frameworks (like SOC 2, ISO) rather than regulatory regimes.
+
+
+KEY_RISK_INDICATOR (KRI)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "KRI-001")
+  name                : string           // Name of the risk indicator (e.g., "Overdue Control Tests", "Unmitigated High Risks")
+  description         : string           // Explanation of what this KRI measures and why it matters
+  owner               : AppUser | null   // Person responsible for monitoring and reporting on this KRI
+  category            : string           // KRI grouping (e.g., "Control Effectiveness", "Risk Exposure", "Compliance")
+  status              : 'green' | 'amber' | 'red' | 'no_data'  // Current health status based on threshold comparison
+  currentValue        : number           // Most recent measured value
+  targetValue         : number           // Desired or acceptable value
+  threshold1          : number           // Warning threshold (triggers amber status)
+  threshold2          : number           // Critical threshold (triggers red status)
+  thresholdDirection  : 'lower_is_better' | 'higher_is_better'  // Whether lower or higher values are preferred
+  calculationSource   : string           // How value is derived (see enumeration below)
+  measurementUnit     : string           // Unit of measurement (e.g., "count", "percentage", "days")
+  frequency           : string           // How often KRI is updated (e.g., "Daily", "Weekly", "Monthly")
+  lastUpdated         : string           // ISO date when currentValue was last refreshed
+  trend               : 'improving' | 'stable' | 'worsening' | 'unknown'  // Direction of change over time
+  linkedRiskIds       : string[]         // Array of Risk.id values this KRI relates to
+  createdAt           : string           // ISO date when KRI was created
+  updatedAt           : string           // ISO date of most recent modification
+
+Storage Key: erm_kris_v1
+ID Pattern: KRI-###
+
+CalculationSource values:
+  - 'auto_overdue_control_tests' (automatically counts controls past their test date)
+  - 'auto_ineffective_controls' (counts controls rated as ineffective/partially effective)
+  - 'auto_open_high_critical_risks' (counts active risks with high or critical severity)
+  - 'auto_overdue_risk_reviews' (counts risks past their review date)
+  - 'auto_unmitigated_risks' (counts risks without approved mitigation plans)
+  - 'auto_control_coverage' (calculates percentage of risks with linked controls)
+  - 'manual' (manually entered/updated value)
+
+Note: KRIs provide early warning signals of increasing risk exposure or degrading
+      control effectiveness, enabling proactive risk management.
+
+
+3.6 CONFIGURATION & REFERENCE DATA
+================================================================================
+
+EMPLOYER
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "EMP-001")
+  code                : string           // Business code or abbreviation (e.g., "DMBA-001", "BRIG-001")
+  name                : string           // Legal name of employer or organizational entity
+  isActive            : boolean          // True if employer is currently active, false if inactive/historical
+  createdAt           : string           // ISO date when employer record was created
+  createdBy           : string           // Name of person who created this record
+  modifiedAt          : string           // ISO date when employer record was last modified
+  modifiedBy          : string           // Name of person who last updated this record
+
+Storage Key: erm_employers_v1
+ID Pattern: EMP-###
+
+Note: Employers represent organizational entities - can be parent companies, subsidiaries,
+      affiliates, departments, or related entities. Used for organizational hierarchy.
+
+
+EMPLOYER_RELATIONSHIP
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier
+  employerId          : string           // References Employer.id - the primary employer
+  relatedEmployerId   : string           // References Employer.id - the related employer
+  relationshipType    : EmployerRelationshipType  // Nature of the relationship
+
+Storage Key: erm_employer_relationships_v1
+
+EmployerRelationshipType: 'Affiliate' | 'Subsidiary' | 'Non-Related Entity' |
+                          'Department' | 'Other' | 'Funding Entity'
+
+Note: Creates directed relationships between employers to model organizational structure
+      (e.g., "Employer A has Subsidiary Employer B").
+
+
+PRODUCT
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "PRD-001")
+  name                : string           // Product or service name
+  code                : string           // Business code or SKU
+  type                : 'Benefit' | 'Service'  // Classification of offering
+  status              : 'Active' | 'Draft' | 'Retired' | 'Sunset'  // Current lifecycle state
+  description         : string           // Detailed explanation of what this product/service is
+  vendorIds           : string[]         // Array of Vendor.id values - vendors that support or provide this product
+  createdAt           : string           // ISO date when product was created
+  updatedAt           : string           // ISO date of most recent modification
+
+Storage Key: erm_products_v1
+ID Pattern: PRD-###
+
+Note: Products have many-to-many relationships with vendors. Changes to vendorIds
+      must be synced bidirectionally with vendor productIds.
+
+
+CONFIG_OPTION (In-Memory via AppContext)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "CFG-001")
+  tableName           : string           // Entity name this option applies to (e.g., "Vendor", "Contract", "Regulation")
+  fieldName           : string           // Field name this option applies to (e.g., "category", "status", "type")
+  value               : string           // The dropdown option value
+  displayOrder        : number           // Sort sequence for displaying options in dropdowns
+  status              : 'Active' | 'Inactive'  // Whether this option is currently available for selection
+
+Storage: In-memory only (AppContext)
+ID Pattern: CFG-###
+
+Note: Every dropdown field across all forms must have corresponding entries here.
+      This provides centralized management of dropdown values throughout the application.
+
+
+ACTIVITY_ITEM (In-Memory via AppContext)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier (e.g., "ACT-001")
+  entityId            : string           // ID of the entity this activity relates to
+  entityType          : 'vendor' | 'contract'  // Type of entity
+  user                : string           // Display name of user who performed the action
+  userInitials        : string           // User initials for avatar display
+  action              : string           // Description of action performed (e.g., "Added vendor Acme Corp", "Updated contract CON-123")
+  timestamp           : string           // ISO date when action occurred
+
+Storage: In-memory only (AppContext)
+ID Pattern: ACT-###
+
+Note: Provides an activity feed/audit trail for vendors and contracts. Automatically
+      logged when CRUD operations are performed.
+
+
+APP_USER (Mock Data)
+--------------------------------------------------
+Fields:
+  id                  : string           // Unique system identifier
+  firstName           : string           // User's first name
+  lastName            : string           // User's last name
+  email               : string           // User's email address
+  department          : string           // Department the user works in
+  title               : string           // Job title or role
+  initials            : string           // Display initials (e.g., "EC" for Emily Carter)
+  avatarColor         : string           // Color for avatar background in UI
+
+Storage: Mock data only (not persisted)
+
+Note: AppUser records are defined in mockData.ts as seed data. They are referenced
+      throughout the application for ownership, assignment, and user fields, but are
+      not stored in localStorage or AppContext.
+
+
+================================================================================
+4. MANY-TO-MANY RELATIONSHIPS
+================================================================================
+
+All many-to-many relationships are bidirectional and must be kept in sync.
+When unlinking entity A from entity B, both A's reference to B and B's
+reference to A must be removed.
+
+PROCESS_RISK_LINK
+--------------------------------------------------
+Storage Key: erm_process_risk_links_v1
+Connects: Process ↔ Risk
+Fields:
+  id                  : string
+  processId           : string
+  riskId              : string
+  linkDate            : string
+  linkedBy            : string
+
+
+PROCESS_CONTROL_LINK
+--------------------------------------------------
+Storage Key: erm_process_control_links_v1
+Connects: Process ↔ Control
+Fields:
+  id                  : string
+  processId           : string
+  controlId           : string
+  testingFrequency    : string
+  linkDate            : string
+  linkedBy            : string
+
+
+RISK_VENDOR_LINK
+--------------------------------------------------
+Storage Key: erm_risk_vendor_links_v1
+Connects: Risk ↔ Vendor
+Fields:
+  id                  : string
+  riskId              : string
+  vendorId            : string
+  linkDate            : string
+  linkedBy            : string
+
+Note: Bidirectional updates required
+  - When linking: Add vendorId to risk AND add riskId to vendor
+  - When unlinking: Remove from BOTH sides
+
+
+RISK_CONTROL_LINK
+--------------------------------------------------
+Storage Key: erm_risk_control_links_v1
+Connects: Risk ↔ Control
+Fields:
+  id                  : string
+  riskId              : string
+  controlId           : string
+  coverageLevel       : 'full' | 'substantial' | 'partial' | 'minimal'
+  linkDate            : string
+  linkedBy            : string
+
+
+CONTROL_REQUIREMENT_MAPPING
+--------------------------------------------------
+Storage Key: erm_control_requirement_mappings_v1
+Connects: Control ↔ ComplianceRequirement
+Fields:
+  id                      : string
+  controlId               : string
+  requirementId           : string
+  implementationStatus    : 'not_started' | 'in_progress' | 'implemented' | 'not_applicable'
+  mappingDate             : string
+  mappedBy                : string
+
+
+REGULATION_CONTROL_LINK
+--------------------------------------------------
+Storage Key: erm_regulation_control_links_v1
+Connects: Regulation ↔ Control
+Fields:
+  id                  : string
+  regulationId        : string
+  controlId           : string
+  linkDate            : string
+  linkedBy            : string
+
+
+REGULATION_REQUIREMENT_LINK
+--------------------------------------------------
+Storage Key: erm_regulation_requirement_links_v1
+Connects: Regulation ↔ ComplianceRequirement
+Fields:
+  id                  : string
+  regulationId        : string
+  requirementId       : string
+  linkDate            : string
+  linkedBy            : string
+
+
+FRAMEWORK_REQUIREMENT_LINK
+--------------------------------------------------
+Storage Key: erm_framework_requirement_links_v1
+Connects: RegulatoryFramework ↔ ComplianceRequirement
+Fields:
+  id                  : string
+  frameworkId         : string
+  requirementId       : string
+  linkDate            : string
+  linkedBy            : string
+
+
+CHECKLIST_LEVEL_ASSOCIATION
+--------------------------------------------------
+Storage Key: erm_checklist_level_associations_v1
+Connects: ChecklistItem ↔ VendorLevel
+Fields:
+  id                  : string
+  checklistItemId     : string
+  vendorLevelId       : string
+  status              : 'required' | 'optional'
+  createdAt           : string
+  createdBy           : string
+  updatedAt           : string
+  updatedBy           : string
+
+ID Pattern: VLCA-###
+
+
+================================================================================
+5. LOCALSTORAGE KEYS REFERENCE
+================================================================================
+
+Complete alphabetical list of all localStorage keys used:
+
+erm_bill_amendments_v1
+erm_bill_comments_v1
+erm_bill_votes_v1
+erm_bills_v1
+erm_checklist_items_v1
+erm_checklist_level_associations_v1
+erm_classification_categories_v1
+erm_compliance_frameworks_v1
+erm_compliance_requirements_v1
+erm_control_requirement_mappings_v1
+erm_controls_v1
+erm_employer_relationships_v1
+erm_employers_v1
+erm_framework_requirement_links_v1
+erm_kris_v1
+erm_process_control_links_v1
+erm_process_risk_links_v1
+erm_processes_v2
+erm_products_v1
+erm_regulation_comments_v1
+erm_regulation_control_links_v1
+erm_regulation_documents_v1
+erm_regulation_requirement_links_v1
+erm_regulatory_audits_v1
+erm_regulatory_events_v1
+erm_regulatory_frameworks_v1
+erm_regulations_v1
+erm_risk_assessments_v1
+erm_risk_categories_v1
+erm_risk_control_links_v1
+erm_risk_mitigation_actions_v1
+erm_risk_vendor_links_v1
+erm_risks_v1
+erm_vendor_classification_levels_v1
+erm_vendor_levels_v1
+
+
+================================================================================
+6. TYPESCRIPT INTERFACE REFERENCE
+================================================================================
+
+Key Type Aliases:
+--------------------------------------------------
+
+RiskStatus = 'draft' | 'active' | 'closed' | 'archived'
+
+RiskType = 'strategic' | 'operational' | 'financial' | 'compliance' |
+           'reputational' | 'cyber'
+
+AppetiteLevel = 'averse' | 'minimal' | 'cautious' | 'open' | 'hungry'
+
+ReviewFrequency = 'monthly' | 'quarterly' | 'semi_annual' | 'annual'
+
+ProcessStatus = 'Draft' | 'Active' | 'Retired'
+
+StepType = 'Task' | 'Decision' | 'Hand-off'
+
+RegulationStatus = 'monitoring' | 'in-review' | 'in-progress' | 'compliant' |
+                   'non-compliant' | 'not-applicable' | 'archived'
+
+RegulationStage = 'proposed' | 'committee' | 'passed' | 'effective' |
+                  'amended' | 'repealed'
+
+ComplianceStatus = 'not-started' | 'assessment' | 'planning' | 'implementing' |
+                   'testing' | 'compliant' | 'partial' | 'non-compliant'
+
+ImpactLevel = 'critical' | 'high' | 'medium' | 'low'
+
+ControlType = 'preventive' | 'detective' | 'corrective' | 'directive' |
+              'compensating'
+
+ControlFrequency = 'continuous' | 'daily' | 'weekly' | 'monthly' |
+                   'quarterly' | 'annual'
+
+ControlEffectiveness = 'effective' | 'partially_effective' | 'ineffective' |
+                       'not_tested'
+
+ControlStatus = 'active' | 'inactive' | 'in_design' | 'deprecated'
+
+BillStatus = 'introduced' | 'in-committee' | 'committee-passed' |
+             'floor-debate' | 'passed-chamber' | 'other-chamber' |
+             'conference' | 'passed-both' | 'signed' | 'vetoed' | 'failed'
+
+BillPriority = 'critical' | 'high' | 'medium' | 'low'
+
+EmployerRelationshipType = 'Affiliate' | 'Subsidiary' | 'Non-Related Entity' |
+                           'Department' | 'Other' | 'Funding Entity'
+
+
+Data Files Location:
+--------------------------------------------------
+All data layer files are located in: /src/app/data/
+
+Main entity files:
+  - riskData.ts
+  - processData.ts
+  - regulationData.ts
+  - employerData.ts
+  - controlData.ts
+  - complianceFrameworkData.ts
+  - billData.ts
+  - productData.ts
+  - kriData.ts
+  - vendorClassificationData.ts
+  - vendorLevelData.ts
+  - checklistData.ts
+
+Junction table files:
+  - processRiskData.ts
+  - processControlData.ts
+  - vendorRiskData.ts
+  - riskControlData.ts
+  - riskAssessmentData.ts
+  - riskMitigationData.ts
+  - controlRequirementData.ts
+  - regulationControlData.ts
+  - regulationRequirementData.ts
+  - frameworkRequirementData.ts
+
+Utility files:
+  - mockData.ts (AppUser, seed data for in-memory entities)
+  - syncUtils.ts (Helper functions for bidirectional updates)
+
+Context:
+  - /src/app/context/AppContext.tsx (Vendor, Contract, Activity state)
+
+
+================================================================================
+END OF DATA MODEL
+================================================================================

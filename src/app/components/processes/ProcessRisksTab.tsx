@@ -351,7 +351,7 @@ function IdentifyRiskForm({
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
           >
-            <Plus size={14} /> Add to Registry & Link
+            <Plus size={14} /> Add to Register & Link
           </button>
         </div>
       </div>
@@ -682,7 +682,7 @@ function LinkRiskModal({
               fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)',
               margin: '2px 0 0 0',
             }}>
-              Select a risk from the registry to associate with this process.
+              Select a risk from the register to associate with this process.
             </p>
           </div>
           <button
@@ -961,7 +961,7 @@ function UnlinkConfirmDialog({
         }}>
           Remove the link between this process and{' '}
           <strong style={{ color: 'var(--foreground)' }}>{riskTitle}</strong>?{' '}
-          The risk will remain in the registry — only the process association will be removed.
+          The risk will remain in the register — only the process association will be removed.
         </p>
         {/* Contextual warning */}
         <div style={{
@@ -1333,7 +1333,7 @@ export function ProcessRisksTab({ process, navigate, onCountChange }: ProcessRis
           <EmptyState
             icon={ShieldAlert}
             title="No risks identified"
-            description="Link existing risks from the registry, or identify new ones to build a risk profile for this process."
+            description="Link existing risks from the register, or identify new ones to build a risk profile for this process."
             action={{ label: 'Identify First Risk', onClick: handleOpenIdentify }}
           />
         )}

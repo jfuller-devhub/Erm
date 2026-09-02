@@ -318,6 +318,7 @@ export function TPRMDashboard() {
   // ── Stacked bar: vendor count by category × tier ─────────────────────────
   const categories = [...new Set(vendors.map(v => v.category))];
   const categoryBarData = categories.map(cat => ({
+    category: cat,  // Add original category as unique identifier
     name: shortCat(cat),
     Critical: enriched.filter(v => v.category === cat && v.tier === 'critical').length,
     High:     enriched.filter(v => v.category === cat && v.tier === 'high').length,
@@ -486,8 +487,8 @@ export function TPRMDashboard() {
                     paddingAngle={2}
                     dataKey="value"
                   >
-                    {tierDonutData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} stroke="none" />
+                    {tierDonutData.map((entry) => (
+                      <Cell key={`cell-${entry.name}`} fill={entry.color} stroke="none" />
                     ))}
                   </Pie>
                   <Tooltip content={<TierTooltip />} />

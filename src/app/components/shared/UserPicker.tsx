@@ -548,6 +548,45 @@ export function MultiUserPickerInput({
   );
 }
 
+// ─── Unified UserPicker component (supports both single and multi) ───────────
+
+interface UserPickerProps {
+  value: AppUser | AppUser[] | null;
+  onChange: (value: AppUser | AppUser[] | null) => void;
+  users?: AppUser[];
+  placeholder?: string;
+  multiple?: boolean;
+  hasError?: boolean;
+}
+
+export function UserPicker({
+  value,
+  onChange,
+  users = MOCK_USERS,
+  placeholder,
+  multiple = false,
+  hasError = false,
+}: UserPickerProps) {
+  if (multiple) {
+    return (
+      <MultiUserPickerInput
+        value={Array.isArray(value) ? value : []}
+        onChange={(users) => onChange(users)}
+        placeholder={placeholder}
+      />
+    );
+  }
+
+  return (
+    <UserPickerInput
+      value={Array.isArray(value) ? null : value}
+      onChange={(user) => onChange(user)}
+      placeholder={placeholder}
+      hasError={hasError}
+    />
+  );
+}
+
 // ─── Shared row sub-component ─────────────────────────────────────────────────
 
 function UserListRow({
