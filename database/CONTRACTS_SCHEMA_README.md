@@ -1,5 +1,7 @@
 # Contracts Database Schema
 
+> **Note:** This document covers the contracts module in isolation. For the complete multi-module schema including all ERM, compliance, regulatory, and TPRM tables, see [`DATABASE_DESIGN.md`](./DATABASE_DESIGN.md) and [`full_schema.sql`](./full_schema.sql).
+
 ## Overview
 
 This database schema supports comprehensive vendor contract management for enterprise procurement and vendor management systems. It tracks all types of contracts including Master Service Agreements (MSAs), Statements of Work (SOWs), Non-Disclosure Agreements (NDAs), amendments, and purchase orders.
