@@ -1,37 +1,33 @@
 /**
- * Bidirectional sync helpers for the Vendor ↔ Product many-to-many relationship.
+ * Bidirectional sync helpers for the Vendor ↔ Plan many-to-many relationship.
  *
- * Vendors live in AppContext (in-memory).
- * Products live in localStorage via loadProducts/saveProducts.
+ * Vendors live in AppContext (in-memory) and carry a planIds[] array.
+ * Plans live in localStorage via loadPlans/savePlans and carry a vendorIds[] array.
  *
- * When a vendor's productIds change → update the affected products' vendorIds in localStorage.
- * When a product's vendorIds change → call updateVendor() for each affected vendor in AppContext.
+ * When a vendor's planIds change  → update the affected plans' vendorIds in localStorage.
+ * When a plan's vendorIds change  → call updateVendor() for each affected vendor in AppContext.
  */
 
-import { loadProducts, saveProducts } from './productData';
+import { loadPlans, savePlans } from './planData';
 
-// ─── Vendor → Products ────────────────────────────────────────────────────────
+// ─── Vendor → Plans ───────────────────────────────────────────────────────────
 
 /**
  * Called after a vendor is created or updated.
- * Updates the `vendorIds` field of the relevant products in localStorage.
- *
- * @param vendorId     The vendor whose productIds changed.
- * @param newProductIds The vendor's productIds after the change.
- * @param oldProductIds The vendor's productIds before the change ([] for new vendors).
+ * Keeps the vendorIds arrays on the affected Plans in localStorage in sync.
  */
-export function syncVendorProductLinks(
+export function syncVendorPlanLinks(
   vendorId: string,
-  newProductIds: string[],
-  oldProductIds: string[]
+  newPlanIds: string[],
+  oldPlanIds: string[]
 ): void {
-  const added   = newProductIds.filter(id => !oldProductIds.includes(id));
-  const removed = oldProductIds.filter(id => !newProductIds.includes(id));
+  const added   = newPlanIds.filter(id => !oldPlanIds.includes(id));
+  const removed = oldPlanIds.filter(id => !newPlanIds.includes(id));
 
   if (added.length === 0 && removed.length === 0) return;
 
-  const products = loadProducts();
-  const updated = products.map(p => {
+  const plans = loadPlans();
+  const updated = plans.map(p => {
     if (added.includes(p.id) && !p.vendorIds.includes(vendorId)) {
       return { ...p, vendorIds: [...p.vendorIds, vendorId] };
     }
@@ -40,72 +36,48 @@ export function syncVendorProductLinks(
     }
     return p;
   });
-  saveProducts(updated);
+  savePlans(updated);
 }
 
 /**
  * Called when a vendor is deleted.
- * Removes the vendorId from every product's vendorIds array in localStorage.
+ * Removes the vendorId from every plan's vendorIds array in localStorage.
  */
-export function removeVendorFromAllProducts(vendorId: string): void {
-  const products = loadProducts();
-  const updated = products.map(p => ({
+export function removeVendorFromAllPlans(vendorId: string): void {
+  const plans = loadPlans();
+  const updated = plans.map(p => ({
     ...p,
     vendorIds: p.vendorIds.filter(id => id !== vendorId),
   }));
-  saveProducts(updated);
+  savePlans(updated);
 }
 
-// ─── Product → Vendors ────────────────────────────────────────────────────────
+// ─── Plan → Vendors ───────────────────────────────────────────────────────────
 
 /**
- * Called after a product is created or updated.
- * Updates the `productIds` field of the relevant vendors via AppContext's updateVendor.
- *
- * @param productId     The product whose vendorIds changed.
- * @param newVendorIds  The product's vendorIds after the change.
- * @param oldVendorIds  The product's vendorIds before the change ([] for new products).
- * @param vendors       Current vendors array from AppContext.
- * @param updateVendor  AppContext updateVendor function.
+ * Called after a plan's vendorIds change (e.g. from PlanDetail or PlanFormModal).
+ * Updates the planIds field on the relevant vendors via AppContext's updateVendor.
  */
-export function syncProductVendorLinks(
-  productId: string,
+export function syncVendorPlanLinksFromPlan(
+  planId: string,
   newVendorIds: string[],
   oldVendorIds: string[],
-  vendors: Array<{ id: string; productIds: string[] }>,
-  updateVendor: (id: string, changes: { productIds: string[] }) => void
+  vendors: Array<{ id: string; planIds: string[] }>,
+  updateVendor: (id: string, changes: { planIds: string[] }) => void
 ): void {
   const added   = newVendorIds.filter(id => !oldVendorIds.includes(id));
   const removed = oldVendorIds.filter(id => !newVendorIds.includes(id));
 
   for (const vid of added) {
     const vendor = vendors.find(v => v.id === vid);
-    if (vendor && !vendor.productIds.includes(productId)) {
-      updateVendor(vid, { productIds: [...vendor.productIds, productId] });
+    if (vendor && !vendor.planIds.includes(planId)) {
+      updateVendor(vid, { planIds: [...vendor.planIds, planId] });
     }
   }
   for (const vid of removed) {
     const vendor = vendors.find(v => v.id === vid);
     if (vendor) {
-      updateVendor(vid, { productIds: vendor.productIds.filter(id => id !== productId) });
-    }
-  }
-}
-
-/**
- * Called when a product is deleted.
- * Removes the productId from every vendor's productIds array via AppContext.
- */
-export function removeProductFromAllVendors(
-  productId: string,
-  vendors: Array<{ id: string; productIds: string[] }>,
-  updateVendor: (id: string, changes: { productIds: string[] }) => void
-): void {
-  for (const vendor of vendors) {
-    if (vendor.productIds.includes(productId)) {
-      updateVendor(vendor.id, {
-        productIds: vendor.productIds.filter(id => id !== productId),
-      });
+      updateVendor(vid, { planIds: vendor.planIds.filter(id => id !== planId) });
     }
   }
 }

@@ -6,8 +6,8 @@ import { useApp } from '../../context/AppContext';
 import type { Vendor, VendorStatus, VendorCategory, AppUser, VendorProcessAssociation } from '../../data/mockData';
 import type { Process } from '../../data/processData';
 import { loadProcesses } from '../../data/processData';
-import type { Product } from '../../data/productData';
-import { loadProducts } from '../../data/productData';
+import type { Plan } from '../../data/planData';
+import { loadPlans } from '../../data/planData';
 
 interface VendorFormModalProps {
   isOpen: boolean;
@@ -37,7 +37,7 @@ function empty(): Omit<Vendor, 'id' | 'createdDate' | 'updatedDate'> {
     baaRequired: false,
     individualsInvolved: [],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   };
 }
 
@@ -73,10 +73,10 @@ export function VendorFormModal({ isOpen, onClose, onSave, initialData }: Vendor
           baaRequired: initialData.baaRequired ?? false,
           individualsInvolved: initialData.individualsInvolved ?? [],
           processAssociations: initialData.processAssociations ?? [],
-          productIds: initialData.productIds ?? [],
+          planIds: initialData.planIds ?? [],
         });
         setAssocOpen((initialData.processAssociations ?? []).length > 0);
-        setProductAssocOpen((initialData.productIds ?? []).length > 0);
+        setProductAssocOpen((initialData.planIds ?? []).length > 0);
       } else {
         setForm(empty());
         setAssocOpen(false);
@@ -352,8 +352,8 @@ export function VendorFormModal({ isOpen, onClose, onSave, initialData }: Vendor
           >
             {productAssocOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             <Package size={14} style={{ color: 'var(--muted-foreground)' }} />
-            Benefits or Services Associations
-            {form.productIds.length > 0 && (
+            Plan Associations
+            {form.planIds.length > 0 && (
               <span
                 style={{
                   fontFamily: 'var(--font-family-primary)',
@@ -365,7 +365,7 @@ export function VendorFormModal({ isOpen, onClose, onSave, initialData }: Vendor
                   padding: '1px 8px',
                 }}
               >
-                {form.productIds.length}
+                {form.planIds.length}
               </span>
             )}
           </button>
@@ -380,11 +380,11 @@ export function VendorFormModal({ isOpen, onClose, onSave, initialData }: Vendor
                   margin: '0 0 8px 0',
                 }}
               >
-                Link this vendor to the benefits or services they support.
+                Link this vendor to the benefit plans they support.
               </p>
-              <ProductPicker
-                selectedIds={form.productIds}
-                onChange={ids => set('productIds', ids)}
+              <PlanPicker
+                selectedIds={form.planIds}
+                onChange={ids => set('planIds', ids)}
               />
             </div>
           )}
@@ -590,32 +590,32 @@ function ProcessAssociationPicker({
   );
 }
 
-// ─── Product Picker ──────────────────────────────────────────────────────
+// ─── Plan Picker ─────────────────────────────────────────────────────────────
 
-function ProductPicker({
+function PlanPicker({
   selectedIds,
   onChange,
 }: {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
 
   useEffect(() => {
-    setProducts(loadProducts());
+    setPlans(loadPlans());
   }, []);
 
   const selectedSet = new Set(selectedIds);
 
-  function toggleProduct(productId: string) {
-    if (selectedSet.has(productId)) {
-      onChange(selectedIds.filter(id => id !== productId));
+  function togglePlan(planId: string) {
+    if (selectedSet.has(planId)) {
+      onChange(selectedIds.filter(id => id !== planId));
     } else {
-      onChange([...selectedIds, productId]);
+      onChange([...selectedIds, planId]);
     }
   }
 
-  if (products.length === 0) {
+  if (plans.length === 0) {
     return (
       <div
         style={{
@@ -630,7 +630,7 @@ function ProductPicker({
           textAlign: 'center',
         }}
       >
-        No benefits or services available. Create them first in the Benefits or Services Register.
+        No plans available. Create them first in the Products Register.
       </div>
     );
   }
@@ -644,10 +644,10 @@ function ProductPicker({
         overflowY: 'auto',
       }}
     >
-      {products.map(product => {
-        const isChecked = selectedSet.has(product.id);
+      {plans.map(plan => {
+        const isChecked = selectedSet.has(plan.id);
         return (
-          <div key={product.id}>
+          <div key={plan.id}>
             <div
               style={{
                 display: 'flex',
@@ -674,10 +674,10 @@ function ProductPicker({
                 <input
                   type="checkbox"
                   checked={isChecked}
-                  onChange={() => toggleProduct(product.id)}
+                  onChange={() => togglePlan(plan.id)}
                   style={{ accentColor: 'var(--primary)', width: '14px', height: '14px' }}
                 />
-                {product.name}
+                {plan.name}
               </label>
               <span
                 style={{
@@ -687,7 +687,7 @@ function ProductPicker({
                   color: 'var(--muted-foreground)',
                 }}
               >
-                {product.status}
+                {plan.status}
               </span>
             </div>
           </div>

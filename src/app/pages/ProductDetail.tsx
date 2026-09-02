@@ -2,20 +2,17 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Edit2, Trash2, Package, Heart, Briefcase, Tag,
-  ArrowRight, Activity, GitBranch, Plus, ChevronDown, ChevronRight,
-  Building2, X, Search, Map, CheckCircle2,
-  CalendarDays, ChevronUp, ChevronLeft, AlertTriangle,
+  Plus, ChevronRight, CalendarDays, User, CheckCircle, Search, X,
 } from 'lucide-react';
 import { ProductFormModal } from '../components/products/ProductFormModal';
-import { RichTextEditor } from '../components/shared/RichTextEditor';
-import type { Product, ProductType, ProductStatus, RoadmapItem } from '../data/productData';
+import { PlanFormModal } from '../components/plans/PlanFormModal';
+import type { Product, ProductType, ProductStatus } from '../data/productData';
 import { loadProducts, saveProducts } from '../data/productData';
-import type { Process } from '../data/processData';
-import { loadProcesses } from '../data/processData';
-import { formatDate, generateId, MOCK_USERS } from '../data/mockData';
-import type { Vendor } from '../data/mockData';
-import { useApp } from '../context/AppContext';
-import { syncProductVendorLinks, removeProductFromAllVendors } from '../data/syncUtils';
+import type { Plan, PlanStatus } from '../data/planData';
+import { loadPlans } from '../data/planData';
+import type { Employer } from '../data/employerData';
+import { loadEmployers, saveEmployers } from '../data/employerData';
+import { formatDate } from '../data/mockData';
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 
@@ -82,63 +79,120 @@ function ProductTypeBadge({ type }: { type: ProductType }) {
   );
 }
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
+// ─── Plan status badge ────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Strategy', 'Roadmap Items', 'Associated Processes', 'Associated Vendors'] as const;
-type TabKey = typeof TABS[number];
+const PLAN_STATUS_STYLES: Record<string, { background: string; color: string }> = {
+  Active:   { background: '#E8F5EE', color: '#1C8A45' },
+  Draft:    { background: '#FFF3E0', color: '#E07B00' },
+  Inactive: { background: '#F0F0F0', color: '#6B7489' },
+  Archived: { background: '#FDE8E8', color: '#C0392B' },
+};
+
+function PlanStatusBadge({ status }: { status: PlanStatus }) {
+  const style = PLAN_STATUS_STYLES[status] ?? PLAN_STATUS_STYLES.Inactive;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: '20px',
+        padding: '0 8px',
+        borderRadius: '100px',
+        background: style.background,
+        color: style.color,
+        fontFamily: 'var(--font-family-primary)',
+        fontSize: '11px',
+        fontWeight: 'var(--font-weight-semibold)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {status}
+    </span>
+  );
+}
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { vendors, updateVendor } = useApp();
 
   const [products, setProducts] = useState<Product[]>([]);
-  const [processes, setProcesses] = useState<Process[]>([]);
-  const [activeTab, setActiveTab] = useState<TabKey>('Overview');
-  const [modalOpen, setModalOpen] = useState(false);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [employers, setEmployers] = useState<Employer[]>([]);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [showNewPlan, setShowNewPlan] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [employerSearch, setEmployerSearch] = useState('');
+  const [showEmpLink, setShowEmpLink] = useState(false);
+  const [empLinkSearch, setEmpLinkSearch] = useState('');
 
   useEffect(() => {
     setProducts(loadProducts());
-    setProcesses(loadProcesses());
+    setPlans(loadPlans());
+    setEmployers(loadEmployers());
   }, []);
 
   const product = products.find(p => p.id === id) ?? null;
+  const productPlans = plans.filter(pl => pl.productId === id);
 
-  const persist = useCallback((updated: Product[]) => {
+  const persistProducts = useCallback((updated: Product[]) => {
     setProducts(updated);
     saveProducts(updated);
   }, []);
 
-  function handleSave(updated: Product) {
-    const existing = products.find(p => p.id === updated.id);
-    const oldVendorIds = existing?.vendorIds ?? [];
-    const newVendorIds = updated.vendorIds ?? [];
-    persist(products.map(p => (p.id === updated.id ? updated : p)));
-    // Bidirectional sync: update vendor productIds in AppContext
-    syncProductVendorLinks(updated.id, newVendorIds, oldVendorIds, vendors, updateVendor);
+  function handleSaveProduct(updated: Product) {
+    persistProducts(products.map(p => (p.id === updated.id ? updated : p)));
+    setEditModalOpen(false);
   }
 
   function handleDelete() {
     if (!id) return;
-    // Sync: remove this product from all vendors before deleting
-    removeProductFromAllVendors(id, vendors, updateVendor);
-    persist(products.filter(p => p.id !== id));
+    persistProducts(products.filter(p => p.id !== id));
     navigate('/products');
   }
 
+  function handlePlanSaved(plan: Plan) {
+    setPlans(loadPlans());
+    setShowNewPlan(false);
+    setEditingPlan(null);
+  }
+
+  function handleLinkEmployer(employerId: string) {
+    if (!id) return;
+    const updated = employers.map(e =>
+      e.id === employerId && !e.productIds.includes(id)
+        ? { ...e, productIds: [...e.productIds, id], modifiedAt: new Date().toISOString().split('T')[0], modifiedBy: 'Admin' }
+        : e,
+    );
+    setEmployers(updated);
+    saveEmployers(updated);
+    setEmpLinkSearch('');
+    setShowEmpLink(false);
+  }
+
+  function handleUnlinkEmployer(employerId: string) {
+    if (!id) return;
+    const updated = employers.map(e =>
+      e.id === employerId
+        ? { ...e, productIds: e.productIds.filter(pid => pid !== id), modifiedAt: new Date().toISOString().split('T')[0], modifiedBy: 'Admin' }
+        : e,
+    );
+    setEmployers(updated);
+    saveEmployers(updated);
+  }
+
   // ─── Not Found ─────────────────────────────────────────────────────────
-  if (!product) {
+  if (products.length > 0 && !product) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', gap: '16px' }}>
         <Package size={48} style={{ color: 'var(--muted-foreground)' }} />
         <h2 style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', margin: 0 }}>
-          Benefit or Service not found
+          Product not found
         </h2>
-        <p style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)', margin: 0 }}>
-          This benefit or service may have been deleted or the URL is invalid.
+        <p style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)', margin: 0 }}>
+          This product may have been deleted or the URL is invalid.
         </p>
         <button
           onClick={() => navigate('/products')}
@@ -149,45 +203,40 @@ export function ProductDetail() {
             fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
           }}
         >
-          Back to Benefits or Services Register
+          Back to Products Register
         </button>
       </div>
     );
   }
 
-  // Resolve associated processes
-  const resolvedAssociations = product.processAssociations.map(assoc => {
-    const proc = processes.find(p => p.id === assoc.processId);
-    const sub = assoc.subProcessId
-      ? (proc?.subProcesses ?? []).find(sp => sp.id === assoc.subProcessId)
-      : null;
-    return { assoc, proc, sub };
-  }).filter(a => a.proc);
+  if (!product) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* ─── Back link ──────────────────────────────────────────────── */}
-      <button
-        onClick={() => navigate('/products')}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '6px',
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: 0,
-          fontFamily: 'var(--font-family-primary)',
-          fontSize: 'var(--text-base)',
-          fontWeight: 'var(--font-weight-semibold)',
-          color: 'var(--primary)',
-        }}
-      >
-        <ArrowLeft size={14} />
-        Back to Benefits or Services Register
-      </button>
 
-      {/* ─── Record Summary Header ──────────────────────────────────── */}
+      {/* ─── Breadcrumb + back ───────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          onClick={() => navigate('/products')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--muted-foreground)',
+            fontFamily: 'var(--font-family-primary)',
+            fontSize: 'var(--text-base)', padding: 0,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--foreground)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)'; }}
+        >
+          <ArrowLeft size={14} /> Products Register
+        </button>
+        <ChevronRight size={14} style={{ color: 'var(--muted-foreground)' }} />
+        <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--foreground)', fontWeight: 'var(--font-weight-semibold)' }}>
+          {product.name}
+        </span>
+      </div>
+
+      {/* ─── Header card ─────────────────────────────────────────────────── */}
       <div
         style={{
           background: 'var(--card)',
@@ -195,13 +244,16 @@ export function ProductDetail() {
           borderRadius: 'var(--radius-card)',
           boxShadow: 'var(--elevation-sm)',
           padding: '24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '16px',
         }}
       >
+        {/* Title row */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
-          {/* Left: Name + badges + description */}
-          <div style={{ flex: '1 1 300px', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
-              <h2
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <h1
                 style={{
                   fontFamily: 'var(--font-family-primary)',
                   fontSize: '22px',
@@ -212,2794 +264,472 @@ export function ProductDetail() {
                 }}
               >
                 {product.name}
-              </h2>
-              <ProductTypeBadge type={product.type} />
+              </h1>
               <ProductStatusBadge status={product.status} />
+              <ProductTypeBadge type={product.type} />
             </div>
-            {product.description && (
-              <p
-                style={{
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-regular)',
-                  color: 'var(--muted-foreground)',
-                  margin: '0 0 8px 0',
-                  lineHeight: '22px',
-                }}
-              >
-                {product.description}
-              </p>
-            )}
-            {/* Tags */}
-            {product.tags.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {product.tags.map(tag => (
-                  <span
-                    key={tag}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '3px',
-                      background: 'rgba(35,34,240,0.08)',
-                      color: 'var(--primary)',
-                      borderRadius: '100px',
-                      padding: '2px 8px',
-                      fontFamily: 'var(--font-family-primary)',
-                      fontSize: '11px',
-                      fontWeight: 'var(--font-weight-semibold)',
-                    }}
-                  >
-                    <Tag size={9} />
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
+            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>
+              {product.id} &middot; {product.category}
+            </div>
           </div>
 
-          {/* Right: Actions (primary right-aligned) */}
+          {/* Action buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
-              onClick={() => setDeleteConfirmOpen(true)}
+              onClick={() => setEditModalOpen(true)}
               style={{
-                height: '36px', padding: '0 16px',
-                border: '1px solid var(--destructive)',
-                borderRadius: 'var(--radius-button)',
-                background: 'transparent',
-                color: 'var(--destructive)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-semibold)',
-                cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px',
-                transition: 'background 0.1s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(192,57,43,0.06)'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-            >
-              <Trash2 size={14} />
-              Delete
-            </button>
-            <button
-              onClick={() => setModalOpen(true)}
-              style={{
-                height: '36px', padding: '0 16px',
-                border: 'none',
-                borderRadius: 'var(--radius-button)',
-                background: 'var(--primary)',
-                color: 'var(--primary-foreground)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-semibold)',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '6px',
-                transition: 'opacity 0.1s',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-            >
-              <Edit2 size={14} />
-              Edit Benefit or Service
-            </button>
-          </div>
-        </div>
-
-        {/* Key metadata */}
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '16px' }}>
-          <MetadataChip label="Category" value={product.category} />
-          {product.owner && <MetadataChip label="Owner" value={product.owner.name} />}
-          {product.effectiveStartDate && (
-            <MetadataChip
-              label="Effective"
-              value={`${formatDate(product.effectiveStartDate)}${product.effectiveEndDate ? ' – ' + formatDate(product.effectiveEndDate) : ''}`}
-            />
-          )}
-          <MetadataChip label="Processes" value={String(resolvedAssociations.length)} />
-          <MetadataChip label="Vendors" value={String(product.vendorIds.length)} />
-          <MetadataChip label="Last Updated" value={formatDate(product.updatedDate)} />
-        </div>
-      </div>
-
-      {/* ─── Tabs ───────────────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        {TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              height: '40px',
-              padding: '0 16px',
-              border: 'none',
-              borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent',
-              background: 'transparent',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: activeTab === tab ? 'var(--font-weight-semibold)' : 'var(--font-weight-regular)',
-              color: activeTab === tab ? 'var(--primary)' : 'var(--muted-foreground)',
-              cursor: 'pointer',
-              transition: 'color 0.1s, border-color 0.1s',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            {tab === 'Strategy' && <Map size={13} />}
-            {tab}
-            {tab === 'Associated Processes' && resolvedAssociations.length > 0 && (
-              <span
-                style={{
-                  marginLeft: '6px',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: '11px',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  color: activeTab === tab ? 'var(--primary)' : 'var(--muted-foreground)',
-                  background: activeTab === tab ? 'rgba(35,34,240,0.08)' : 'var(--muted)',
-                  borderRadius: '100px',
-                  padding: '1px 7px',
-                }}
-              >
-                {resolvedAssociations.length}
-              </span>
-            )}
-            {tab === 'Associated Vendors' && product.vendorIds.length > 0 && (
-              <span
-                style={{
-                  marginLeft: '6px',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: '11px',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  color: activeTab === tab ? 'var(--primary)' : 'var(--muted-foreground)',
-                  background: activeTab === tab ? 'rgba(35,34,240,0.08)' : 'var(--muted)',
-                  borderRadius: '100px',
-                  padding: '1px 7px',
-                }}
-              >
-                {product.vendorIds.length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* ─── Tab Content ───────────────────────────────────────────── */}
-      {activeTab === 'Overview' && (
-        <OverviewTab product={product} />
-      )}
-
-      {activeTab === 'Strategy' && (
-        <RoadmapTab product={product} onUpdateProduct={handleSave} />
-      )}
-
-      {activeTab === 'Roadmap Items' && (
-        <RoadmapItemsPanel product={product} onUpdateProduct={handleSave} />
-      )}
-
-      {activeTab === 'Associated Processes' && (
-        <AssociatedProcessesTab
-          product={product}
-          resolvedAssociations={resolvedAssociations}
-          allProcesses={processes}
-          navigate={navigate}
-          onUpdateProduct={handleSave}
-        />
-      )}
-
-      {activeTab === 'Associated Vendors' && (
-        <AssociatedVendorsTab
-          product={product}
-          vendors={vendors}
-          navigate={navigate}
-          onUpdateProduct={handleSave}
-        />
-      )}
-
-      {/* ─── Edit Modal ─────────────────────────────────────────────── */}
-      <ProductFormModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSave}
-        editingProduct={product}
-      />
-
-      {/* ─── Delete Confirmation ─────────────────────────────────────── */}
-      {deleteConfirmOpen && (
-        <DeleteConfirmDialog
-          productName={product.name}
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteConfirmOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-// ─── Overview Tab ────────────────────────────────────────────────────────────
-
-function OverviewTab({ product }: { product: Product }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Description card */}
-      {product.description && (
-        <ReadOnlyCard label="Description" value={product.description} />
-      )}
-
-      {/* Key fields */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-        }}
-      >
-        <ReadOnlyCard label="Benefit or Service ID" value={product.id} />
-        <ReadOnlyCard label="Type" value={product.type} />
-        <ReadOnlyCard label="Category" value={product.category} />
-      </div>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
-        }}
-      >
-        <ReadOnlyCard label="Status" value={product.status} />
-        <ReadOnlyCard label="Benefit or Service Owner" value={product.owner ? product.owner.name : '—'} />
-        <ReadOnlyCard label="Created" value={formatDate(product.createdDate)} />
-      </div>
-
-      {/* Effective dates */}
-      {(product.effectiveStartDate || product.effectiveEndDate) && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-          }}
-        >
-          <ReadOnlyCard label="Effective Start Date" value={product.effectiveStartDate ? formatDate(product.effectiveStartDate) : '—'} />
-          <ReadOnlyCard label="Effective End Date" value={product.effectiveEndDate ? formatDate(product.effectiveEndDate) : '—'} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Roadmap Tab ─────────────────────────────────────────────────────────────
-
-const ROADMAP_FIELDS: {
-  key: keyof Pick<Product,
-    'roadmapPurposeAlignment' | 'roadmapPlanning' | 'roadmapProtection' |
-    'roadmapPriceCompetitiveness' | 'roadmapPerformanceMeasurement' |
-    'roadmapParticipantExperience'>;
-  label: string;
-  helpText: string;
-  placeholder: string;
-}[] = [
-  {
-    key: 'roadmapPurposeAlignment',
-    label: 'Purpose Alignment',
-    helpText: 'Describe how this benefit or service aligns with organizational mission, strategy, and employee value proposition.',
-    placeholder: 'Describe the strategic purpose and alignment for this benefit or service…',
-  },
-  {
-    key: 'roadmapPlanning',
-    label: 'Planning (3–5 Year)',
-    helpText: 'Outline the 3–5 year roadmap including planned enhancements, transitions, or lifecycle milestones.',
-    placeholder: 'Describe the 3–5 year planning horizon, milestones, and initiatives…',
-  },
-  {
-    key: 'roadmapProtection',
-    label: 'Protection (Regulatory or Legal Considerations)',
-    helpText: 'Document applicable regulatory requirements, legal obligations, compliance mandates, and risk mitigation measures.',
-    placeholder: 'Describe regulatory requirements, legal considerations, and compliance obligations…',
-  },
-  {
-    key: 'roadmapPriceCompetitiveness',
-    label: 'Price Competitiveness',
-    helpText: 'Assess market competitiveness, cost benchmarking, and value relative to peer organizations and industry benchmarks.',
-    placeholder: 'Describe pricing strategy, cost benchmarks, and market competitiveness analysis…',
-  },
-  {
-    key: 'roadmapPerformanceMeasurement',
-    label: 'Performance Measurement (KPIs)',
-    helpText: 'Define key performance indicators, success metrics, and measurement cadence for this benefit or service.',
-    placeholder: 'Define KPIs, targets, data sources, and measurement frequency…',
-  },
-  {
-    key: 'roadmapParticipantExperience',
-    label: 'Participant Experience',
-    helpText: 'Describe the end-to-end participant journey, touchpoints, satisfaction drivers, and initiatives to improve the member or employee experience.',
-    placeholder: 'Describe the participant journey, key touchpoints, pain points, and planned experience improvements…',
-  },
-];
-
-function RoadmapTab({
-  product,
-  onUpdateProduct,
-}: {
-  product: Product;
-  onUpdateProduct: (updated: Product) => void;
-}) {
-  type DraftState = Pick<Product,
-    'roadmapPurposeAlignment' | 'roadmapPlanning' | 'roadmapProtection' |
-    'roadmapPriceCompetitiveness' | 'roadmapPerformanceMeasurement' |
-    'roadmapParticipantExperience'>;
-
-  function buildDraft(p: Product): DraftState {
-    return {
-      roadmapPurposeAlignment:       p.roadmapPurposeAlignment       ?? '',
-      roadmapPlanning:               p.roadmapPlanning               ?? '',
-      roadmapProtection:             p.roadmapProtection             ?? '',
-      roadmapPriceCompetitiveness:   p.roadmapPriceCompetitiveness   ?? '',
-      roadmapPerformanceMeasurement: p.roadmapPerformanceMeasurement ?? '',
-      roadmapParticipantExperience:  p.roadmapParticipantExperience  ?? '',
-    };
-  }
-
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [draft, setDraft] = useState<DraftState>(() => buildDraft(product));
-  const [saved, setSaved] = useState(false);
-
-  // Keep draft in sync when navigating between records
-  useEffect(() => {
-    setDraft(buildDraft(product));
-    setIsEditMode(false);
-    setSaved(false);
-  }, [product.id]);
-
-  function handleEdit() {
-    setDraft(buildDraft(product));
-    setIsEditMode(true);
-    setSaved(false);
-  }
-
-  function handleCancel() {
-    setDraft(buildDraft(product));
-    setIsEditMode(false);
-  }
-
-  function handleChange(key: keyof DraftState, html: string) {
-    setDraft(prev => ({ ...prev, [key]: html }));
-  }
-
-  function handleSave() {
-    onUpdateProduct({
-      ...product,
-      ...draft,
-      updatedDate: new Date().toISOString(),
-    });
-    setIsEditMode(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3500);
-  }
-
-  // ── Shared header bar (read-only and edit mode share the same chrome) ──────
-  const headerBar = (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px',
-        padding: '14px 20px',
-        background: 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-card) var(--radius-card) 0 0',
-        borderBottom: 'none',
-        flexWrap: 'wrap',
-      }}
-    >
-      {/* Left: icon + title + subtitle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-        <Map size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-        <div>
-          <div
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--foreground)',
-              lineHeight: '20px',
-            }}
-          >
-            Strategy
-          </div>
-          <div
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-regular)',
-              color: 'var(--muted-foreground)',
-              lineHeight: '18px',
-            }}
-          >
-            Strategic planning, regulatory considerations, and performance measurement for this benefit or service.
-          </div>
-        </div>
-      </div>
-
-      {/* Right: saved badge + buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        {saved && !isEditMode && (
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              height: '28px',
-              padding: '0 10px',
-              borderRadius: '100px',
-              background: '#E8F5EE',
-              color: '#1C8A45',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-semibold)',
-              lineHeight: '16px',
-            }}
-          >
-            <CheckCircle2 size={12} />
-            Saved
-          </div>
-        )}
-
-        {!isEditMode ? (
-          /* ── Read-only: Edit button only ── */
-          <button
-            type="button"
-            onClick={handleEdit}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              border: 'none',
-              borderRadius: 'var(--radius-button)',
-              background: 'var(--primary)',
-              color: 'var(--primary-foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-              transition: 'opacity 0.1s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <Edit2 size={13} />
-            Edit Strategy
-          </button>
-        ) : (
-          /* ── Edit mode: Cancel (secondary) + Save (primary) ── */
-          <>
-            <button
-              type="button"
-              onClick={handleCancel}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '36px',
-                padding: '0 16px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-button)',
-                background: 'transparent',
-                color: 'var(--foreground)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-semibold)',
-                cursor: 'pointer',
-                transition: 'background 0.1s',
+                height: '32px', padding: '0 12px',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-button)',
+                background: 'transparent', color: 'var(--foreground)',
+                fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
+                fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
               }}
               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
             >
-              <X size={13} />
-              Cancel
+              <Edit2 size={13} /> Edit
             </button>
             <button
-              type="button"
-              onClick={handleSave}
+              onClick={() => setDeleteConfirmOpen(true)}
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                height: '36px',
-                padding: '0 16px',
-                border: 'none',
-                borderRadius: 'var(--radius-button)',
-                background: 'var(--primary)',
-                color: 'var(--primary-foreground)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-semibold)',
-                cursor: 'pointer',
-                transition: 'opacity 0.1s',
+                display: 'flex', alignItems: 'center', gap: '6px',
+                height: '32px', padding: '0 12px',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-button)',
+                background: 'transparent', color: 'var(--muted-foreground)',
+                fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
+                fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--destructive)';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--destructive)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)';
+              }}
             >
-              <CheckCircle2 size={13} />
-              Save Strategy
+              <Trash2 size={13} /> Delete
             </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── READ-ONLY VIEW ─────────────────────────────────────────────────────────
-  if (!isEditMode) {
-    const hasAnyContent = ROADMAP_FIELDS.some(f => {
-      const v = product[f.key] ?? '';
-      return v !== '' && v !== '<br>' && v !== '<div><br></div>';
-    });
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-        {headerBar}
-        <div
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderTop: 'none',
-            borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-          }}
-        >
-          {!hasAnyContent ? (
-            /* ── Empty state per Appian guidelines (48px icon, SM heading, MD body) ── */
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '56px 24px',
-                gap: '12px',
-                textAlign: 'center',
-              }}
-            >
-              <Map size={48} style={{ color: 'var(--muted-foreground)', opacity: 0.35 }} />
-              <div
-                style={{
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  color: 'var(--foreground)',
-                  lineHeight: '20px',
-                }}
-              >
-                No strategy content yet
-              </div>
-              <div
-                style={{
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-regular)',
-                  color: 'var(--muted-foreground)',
-                  lineHeight: '22px',
-                  maxWidth: '400px',
-                }}
-              >
-                Click{' '}
-                <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Edit Strategy</strong>
-                {' '}to add strategic planning, regulatory considerations, and performance measurement details.
-              </div>
-            </div>
-          ) : (
-            /* ── Populated: one row per field, separated by dividers ── */
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {ROADMAP_FIELDS.map((field, idx) => {
-                const html = product[field.key] ?? '';
-                const isEmpty = !html || html === '<br>' || html === '<div><br></div>';
-                const isLast = idx === ROADMAP_FIELDS.length - 1;
-                return (
-                  <div
-                    key={field.key}
-                    style={{
-                      padding: '20px 24px',
-                      borderBottom: isLast ? 'none' : '1px solid var(--border)',
-                    }}
-                  >
-                    {/* Label / SM — uppercase metadata label */}
-                    <div
-                      style={{
-                        fontFamily: 'var(--font-family-primary)',
-                        fontSize: '12px',
-                        fontWeight: 'var(--font-weight-semibold)',
-                        color: 'var(--muted-foreground)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em',
-                        lineHeight: '16px',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      {field.label}
-                    </div>
-
-                    {isEmpty ? (
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: 'var(--text-base)',
-                          fontWeight: 'var(--font-weight-regular)',
-                          color: 'var(--muted-foreground)',
-                          fontStyle: 'italic',
-                          lineHeight: '22px',
-                        }}
-                      >
-                        Not yet defined
-                      </span>
-                    ) : (
-                      <div
-                        className="rich-text-output"
-                        dangerouslySetInnerHTML={{ __html: html }}
-                        style={{
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: 'var(--text-base)',
-                          fontWeight: 'var(--font-weight-regular)',
-                          color: 'var(--foreground)',
-                          lineHeight: '22px',
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
-      </div>
-    );
-  }
 
-  // ── EDIT MODE VIEW ─────────────────────────────────────────────────────────
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-      {headerBar}
-
-      {/* Edit context banner */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '9px 20px',
-          background: 'rgba(0,102,204,0.05)',
-          borderLeft: '1px solid var(--border)',
-          borderRight: '1px solid var(--border)',
-          borderBottom: '1px solid rgba(0,102,204,0.18)',
-        }}
-      >
-        <Edit2 size={12} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-        <span
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: '12px',
-            fontWeight: 'var(--font-weight-regular)',
-            color: 'var(--primary)',
-            lineHeight: '18px',
-          }}
-        >
-          You are editing the Strategy. Use the toolbar in each field to format text, then click{' '}
-          <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Save Strategy</strong>{' '}
-          to apply or{' '}
-          <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Cancel</strong>{' '}
-          to discard.
-        </span>
-      </div>
-
-      {/* Rich text fields */}
-      <div
-        style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          borderTop: 'none',
-          borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '28px',
-        }}
-      >
-        {ROADMAP_FIELDS.map(field => (
-          <RichTextEditor
-            key={field.key}
-            label={field.label}
-            helpText={field.helpText}
-            placeholder={field.placeholder}
-            value={draft[field.key]}
-            onChange={html => handleChange(field.key, html)}
-            minHeight={160}
-          />
-        ))}
-
-        {/* Bottom action bar — right-aligned per Appian guidelines */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            gap: '8px',
-            paddingTop: '12px',
-            borderTop: '1px solid var(--border)',
-          }}
-        >
-          <button
-            type="button"
-            onClick={handleCancel}
+        {/* Description */}
+        {product.description && (
+          <p
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-button)',
-              background: 'transparent',
+              fontFamily: 'var(--font-family-primary)',
+              fontSize: 'var(--text-base)',
+              fontWeight: 'var(--font-weight-regular)',
               color: 'var(--foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-              transition: 'background 0.1s',
+              margin: 0,
+              lineHeight: '22px',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
           >
-            <X size={13} />
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              border: 'none',
-              borderRadius: 'var(--radius-button)',
-              background: 'var(--primary)',
-              color: 'var(--primary-foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-              transition: 'opacity 0.1s',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <CheckCircle2 size={13} />
-            Save Strategy
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Roadmap Items Panel (data grid) ─────────────────────────────────────────
-
-type RoadmapSortKey = 'name' | 'owner' | 'startDate' | 'endDate';
-
-function RoadmapGridColHeader({
-  label, sortKey, activeSort, dir, onSort, center = false,
-}: {
-  label: string;
-  sortKey?: RoadmapSortKey;
-  activeSort: RoadmapSortKey | null;
-  dir: 'asc' | 'desc';
-  onSort?: (k: RoadmapSortKey) => void;
-  center?: boolean;
-}) {
-  const isActive = sortKey && activeSort === sortKey;
-  return (
-    <th
-      onClick={() => sortKey && onSort?.(sortKey)}
-      style={{
-        padding: '0 12px',
-        height: '36px',
-        background: 'var(--muted)',
-        borderRight: '1px solid var(--border)',
-        textAlign: center ? 'center' : 'left',
-        fontFamily: 'var(--font-family-primary)',
-        fontSize: '12px',
-        fontWeight: 'var(--font-weight-semibold)',
-        color: 'var(--muted-foreground)',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        whiteSpace: 'nowrap',
-        cursor: sortKey ? 'pointer' : 'default',
-        userSelect: 'none',
-      }}
-    >
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-        {label}
-        {sortKey && (
-          isActive
-            ? (dir === 'asc'
-                ? <ChevronUp size={11} style={{ color: 'var(--primary)' }} />
-                : <ChevronDown size={11} style={{ color: 'var(--primary)' }} />)
-            : <ChevronDown size={11} style={{ color: 'var(--muted-foreground)', opacity: 0.35 }} />
+            {product.description}
+          </p>
         )}
-      </div>
-    </th>
-  );
-}
 
-function RoadmapItemModal({
-  item,
-  onSave,
-  onCancel,
-}: {
-  item: RoadmapItem | null;
-  onSave: (item: RoadmapItem) => void;
-  onCancel: () => void;
-}) {
-  const isEdit = item !== null;
-  const [name, setName] = React.useState(item?.name ?? '');
-  const [description, setDescription] = React.useState(item?.description ?? '');
-  const [ownerId, setOwnerId] = React.useState(item?.owner?.id ?? '');
-  const [startDate, setStartDate] = React.useState(item?.startDate ?? '');
-  const [endDate, setEndDate] = React.useState(item?.endDate ?? '');
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
-
-  function validate() {
-    const e: Record<string, string> = {};
-    if (!name.trim()) e.name = 'Name is required.';
-    if (!startDate) e.startDate = 'Start date is required.';
-    if (!endDate) e.endDate = 'End date is required.';
-    if (startDate && endDate && endDate < startDate) e.endDate = 'End date must be on or after start date.';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  }
-
-  function handleSubmit() {
-    if (!validate()) return;
-    const owner = MOCK_USERS.find(u => u.id === ownerId) ?? null;
-    onSave({ id: item?.id ?? generateId(), name: name.trim(), description: description.trim(), owner, startDate, endDate });
-  }
-
-  const inp: React.CSSProperties = {
-    width: '100%', height: '36px', padding: '0 12px',
-    border: '1px solid var(--border)', borderRadius: 'var(--radius-input)',
-    background: 'var(--input-background)', color: 'var(--foreground)',
-    fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
-    fontWeight: 'var(--font-weight-regular)', outline: 'none', boxSizing: 'border-box',
-  };
-  const lbl: React.CSSProperties = {
-    display: 'block', fontFamily: 'var(--font-family-primary)',
-    fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)',
-    color: 'var(--foreground)', lineHeight: '20px', marginBottom: '6px',
-  };
-  const err: React.CSSProperties = {
-    fontFamily: 'var(--font-family-primary)', fontSize: '12px',
-    fontWeight: 'var(--font-weight-regular)', color: 'var(--destructive)',
-    lineHeight: '18px', marginTop: '4px',
-  };
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'rgba(0,0,0,0.45)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      <div style={{
-        background: 'var(--card)', borderRadius: 'var(--radius-card)',
-        border: '1px solid var(--border)',
-        width: '100%', maxWidth: '540px',
-        display: 'flex', flexDirection: 'column', maxHeight: '92vh', overflow: 'auto',
-      }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px', borderBottom: '1px solid var(--border)',
-        }}>
-          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '18px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '26px' }}>
-            {isEdit ? 'Edit Roadmap Item' : 'Add Roadmap Item'}
-          </div>
-          <button type="button" onClick={onCancel} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer' }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Name */}
-          <div>
-            <label style={lbl}>Name <span style={{ color: 'var(--destructive)' }}>*</span></label>
-            <input
-              type="text" value={name}
-              onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: '' })); }}
-              placeholder="Enter roadmap item name…"
-              style={{ ...inp, borderColor: errors.name ? 'var(--destructive)' : undefined }}
-            />
-            {errors.name && <div style={err}>{errors.name}</div>}
-          </div>
-
-          {/* Owner — dropdown (3+ options → dropdown per Appian guidelines) */}
-          <div>
-            <label style={lbl}>Owner</label>
-            <select
-              value={ownerId}
-              onChange={e => setOwnerId(e.target.value)}
-              style={{ ...inp, cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none' }}
-            >
-              <option value="">— Unassigned —</option>
-              {MOCK_USERS.map(u => (
-                <option key={u.id} value={u.id}>{u.name} ({u.department})</option>
-              ))}
-            </select>
-            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: '18px', marginTop: '4px' }}>
-              Select the team member responsible for this item.
-            </div>
-          </div>
-
-          {/* Start + End dates side-by-side */}
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>Start Date <span style={{ color: 'var(--destructive)' }}>*</span></label>
-              <input
-                type="date" value={startDate}
-                onChange={e => { setStartDate(e.target.value); setErrors(p => ({ ...p, startDate: '' })); }}
-                style={{ ...inp, borderColor: errors.startDate ? 'var(--destructive)' : undefined }}
-              />
-              {errors.startDate && <div style={err}>{errors.startDate}</div>}
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>End Date <span style={{ color: 'var(--destructive)' }}>*</span></label>
-              <input
-                type="date" value={endDate}
-                onChange={e => { setEndDate(e.target.value); setErrors(p => ({ ...p, endDate: '' })); }}
-                style={{ ...inp, borderColor: errors.endDate ? 'var(--destructive)' : undefined }}
-              />
-              {errors.endDate && <div style={err}>{errors.endDate}</div>}
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label style={lbl}>Description</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Describe the scope, goals, and expected outcomes…"
-              rows={4}
-              style={{ ...inp, height: 'auto', padding: '8px 12px', resize: 'vertical', lineHeight: '22px' }}
-            />
-            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: '18px', marginTop: '4px' }}>
-              Optional. Provide context on scope, goals, and expected outcomes.
-            </div>
-          </div>
-        </div>
-
-        {/* Footer — right-aligned per Appian guidelines */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
-          <button
-            type="button" onClick={onCancel}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'background 0.1s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button" onClick={handleSubmit}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'opacity 0.1s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <CheckCircle2 size={13} />
-            {isEdit ? 'Save Changes' : 'Add Item'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DeleteRoadmapItemDialog({
-  itemName, onConfirm, onCancel,
-}: { itemName: string; onConfirm: () => void; onCancel: () => void }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-      <div style={{ background: 'var(--card)', borderRadius: 'var(--radius-card)', border: '1px solid var(--border)', width: '100%', maxWidth: '440px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-          <AlertTriangle size={18} style={{ color: 'var(--destructive)', flexShrink: 0 }} />
-          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '18px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '26px' }}>
-            Delete Roadmap Item
-          </div>
-        </div>
-        <div style={{ padding: '20px', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-regular)', color: 'var(--foreground)', lineHeight: '22px' }}>
-          Are you sure you want to delete <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>{itemName}</strong>? This action cannot be undone.
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
-          <button
-            type="button" onClick={onCancel}
-            style={{ display: 'inline-flex', alignItems: 'center', height: '36px', padding: '0 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button" onClick={onConfirm}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--destructive)', color: 'var(--destructive-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', transition: 'opacity 0.1s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <Trash2 size={13} />
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RoadmapItemsPanel({
-  product,
-  onUpdateProduct,
-}: {
-  product: Product;
-  onUpdateProduct: (updated: Product) => void;
-}) {
-  const [showModal, setShowModal] = React.useState(false);
-  const [editingItem, setEditingItem] = React.useState<RoadmapItem | null>(null);
-  const [deleteTarget, setDeleteTarget] = React.useState<RoadmapItem | null>(null);
-  const [sortKey, setSortKey] = React.useState<RoadmapSortKey>('startDate');
-  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = React.useState(1);
-  const PAGE_SIZE = 10;
-
-  const items = product.roadmapItems ?? [];
-
-  const sorted = [...items].sort((a, b) => {
-    let cmp = 0;
-    if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
-    else if (sortKey === 'owner') cmp = (a.owner?.name ?? '').localeCompare(b.owner?.name ?? '');
-    else if (sortKey === 'startDate') cmp = (a.startDate ?? '').localeCompare(b.startDate ?? '');
-    else if (sortKey === 'endDate') cmp = (a.endDate ?? '').localeCompare(b.endDate ?? '');
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  function handleSort(key: RoadmapSortKey) {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('asc'); }
-    setPage(1);
-  }
-
-  function handleAdd() { setEditingItem(null); setShowModal(true); }
-  function handleEdit(item: RoadmapItem) { setEditingItem(item); setShowModal(true); }
-
-  function handleSave(item: RoadmapItem) {
-    const exists = items.find(x => x.id === item.id);
-    const updated = exists ? items.map(x => x.id === item.id ? item : x) : [...items, item];
-    onUpdateProduct({ ...product, roadmapItems: updated, updatedDate: new Date().toISOString() });
-    setShowModal(false);
-  }
-
-  function handleDelete(item: RoadmapItem) {
-    onUpdateProduct({ ...product, roadmapItems: items.filter(x => x.id !== item.id), updatedDate: new Date().toISOString() });
-    setDeleteTarget(null);
-  }
-
-  const todayMs = new Date().setHours(0, 0, 0, 0);
-  const colProps = { activeSort: sortKey as RoadmapSortKey | null, dir: sortDir, onSort: handleSort };
-
-  const pageBtnBase: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    height: '28px', minWidth: '28px', padding: '0 6px',
-    border: '1px solid var(--border)', borderRadius: 'var(--radius-button)',
-    background: 'transparent', color: 'var(--foreground)',
-    fontFamily: 'var(--font-family-primary)', fontSize: '12px',
-    fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
-  };
-
-  return (
-    <>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {/* Panel header — matches RoadmapTab header chrome */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: '12px', padding: '14px 20px',
-          background: 'var(--card)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-card) var(--radius-card) 0 0', borderBottom: 'none',
-          flexWrap: 'wrap',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <CalendarDays size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-            <div>
-              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '20px' }}>
-                Roadmap Items
-              </div>
-              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)', lineHeight: '18px' }}>
-                Planned initiatives and milestones for this benefit or service.
-              </div>
-            </div>
-          </div>
-          <button
-            type="button" onClick={handleAdd}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: '6px',
-              height: '36px', padding: '0 14px', border: 'none',
-              borderRadius: 'var(--radius-button)', background: 'var(--primary)',
-              color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer', transition: 'opacity 0.1s', flexShrink: 0,
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <Plus size={13} />
-            Add Item
-          </button>
-        </div>
-
-        {/* Grid body */}
-        <div style={{
-          background: 'var(--card)', border: '1px solid var(--border)',
-          borderTop: 'none', borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-          overflow: 'hidden',
-        }}>
-          {items.length === 0 ? (
-            /* Empty state — per Appian guidelines: 48px icon, SM heading, MD body, optional CTA */
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '56px 24px', gap: '12px', textAlign: 'center' }}>
-              <CalendarDays size={48} style={{ color: 'var(--muted-foreground)', opacity: 0.28 }} />
-              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '20px' }}>
-                No roadmap items yet
-              </div>
-              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)', lineHeight: '22px', maxWidth: '320px' }}>
-                Click <strong style={{ fontWeight: 'var(--font-weight-semibold)' }}>Add Item</strong> to start tracking planned initiatives and milestones.
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Scrollable table */}
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: '600px' }}>
-                  <colgroup>
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '26%' }} />
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '14%' }} />
-                    <col style={{ width: '14%' }} />
-                    <col style={{ width: '10%' }} />
-                  </colgroup>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                      <RoadmapGridColHeader label="Name"       sortKey="name"      {...colProps} />
-                      <RoadmapGridColHeader label="Description"                    {...colProps} />
-                      <RoadmapGridColHeader label="Owner"      sortKey="owner"     {...colProps} />
-                      <RoadmapGridColHeader label="Start Date" sortKey="startDate" {...colProps} />
-                      <RoadmapGridColHeader label="End Date"   sortKey="endDate"   {...colProps} />
-                      <RoadmapGridColHeader label="Actions"    center              {...colProps} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageItems.map((item, idx) => {
-                      const endMs = item.endDate ? new Date(item.endDate + 'T00:00:00').getTime() : null;
-                      const isPastDue = endMs !== null && endMs < todayMs;
-                      const rowBg = idx % 2 === 1 ? 'var(--muted)' : 'var(--card)';
-                      const cell: React.CSSProperties = {
-                        padding: '0 12px', height: '40px', verticalAlign: 'middle',
-                        borderBottom: '1px solid var(--border)', overflow: 'hidden',
-                      };
-                      const cellText: React.CSSProperties = {
-                        fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
-                        fontWeight: 'var(--font-weight-regular)', color: 'var(--foreground)',
-                        lineHeight: '20px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      };
-                      const metaText: React.CSSProperties = {
-                        fontFamily: 'var(--font-family-primary)', fontSize: '12px',
-                        fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)',
-                        lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      };
-
-                      return (
-                        <tr key={item.id} style={{ background: rowBg }}>
-                          {/* Name — semibold, primary text per a.gridField first-column spec */}
-                          <td style={cell}>
-                            <div style={{ ...cellText, fontWeight: 'var(--font-weight-semibold)' }}>
-                              {item.name}
-                            </div>
-                          </td>
-
-                          {/* Description */}
-                          <td style={cell}>
-                            <div style={metaText}>
-                              {item.description || <span style={{ fontStyle: 'italic' }}>—</span>}
-                            </div>
-                          </td>
-
-                          {/* Owner — avatar chip + name */}
-                          <td style={cell}>
-                            {item.owner ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                                <div style={{
-                                  width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0,
-                                  background: 'var(--primary)', color: 'var(--primary-foreground)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontFamily: 'var(--font-family-primary)', fontSize: '10px',
-                                  fontWeight: 'var(--font-weight-semibold)',
-                                }}>
-                                  {item.owner.initials}
-                                </div>
-                                <span style={metaText}>{item.owner.name}</span>
-                              </div>
-                            ) : (
-                              <span style={{ ...metaText, fontStyle: 'italic' }}>—</span>
-                            )}
-                          </td>
-
-                          {/* Start Date */}
-                          <td style={cell}>
-                            <span style={metaText}>{formatDate(item.startDate) !== '—' ? formatDate(item.startDate) : <span style={{ fontStyle: 'italic' }}>—</span>}</span>
-                          </td>
-
-                          {/* End Date — red + semibold if past due */}
-                          <td style={cell}>
-                            <span style={{
-                              ...metaText,
-                              color: isPastDue ? 'var(--destructive)' : 'var(--muted-foreground)',
-                              fontWeight: isPastDue ? 'var(--font-weight-semibold)' : undefined,
-                            }}>
-                              {formatDate(item.endDate) !== '—' ? formatDate(item.endDate) : <span style={{ fontStyle: 'italic' }}>—</span>}
-                            </span>
-                          </td>
-
-                          {/* Actions */}
-                          <td style={{ ...cell, overflow: 'visible' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
-                              <button
-                                type="button" onClick={() => handleEdit(item)} title="Edit"
-                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--primary)', cursor: 'pointer', transition: 'background 0.1s' }}
-                                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--muted)'; }}
-                                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                type="button" onClick={() => setDeleteTarget(item)} title="Delete"
-                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--destructive)', cursor: 'pointer', transition: 'background 0.1s' }}
-                                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#FDE8E8'; }}
-                                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination — per Appian guidelines when > 10 rows */}
-              {totalPages > 1 && (
+        {/* Metadata row */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', paddingTop: '4px', borderTop: '1px solid var(--border)' }}>
+          {product.owner && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <User size={13} style={{ color: 'var(--muted-foreground)' }} />
+              <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>Owner:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 16px', borderTop: '1px solid var(--border)', background: 'var(--card)',
+                  width: '20px', height: '20px', borderRadius: '50%',
+                  background: 'var(--primary)', color: 'var(--primary-foreground)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'var(--font-family-primary)', fontSize: '8px',
+                  fontWeight: 'var(--font-weight-semibold)',
                 }}>
-                  <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-regular)', color: 'var(--muted-foreground)' }}>
-                    Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, sorted.length)} of {sorted.length}
-                  </span>
-                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                    <button
-                      type="button" disabled={page === 1} onClick={() => setPage(p => p - 1)}
-                      style={{ ...pageBtnBase, opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? 'not-allowed' : 'pointer' }}
-                    >
-                      <ChevronLeft size={13} />
-                    </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                      <button
-                        key={p} type="button" onClick={() => setPage(p)}
-                        style={{
-                          ...pageBtnBase,
-                          background: page === p ? 'var(--primary)' : 'transparent',
-                          color: page === p ? 'var(--primary-foreground)' : 'var(--foreground)',
-                          borderColor: page === p ? 'var(--primary)' : 'var(--border)',
-                        }}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                    <button
-                      type="button" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
-                      style={{ ...pageBtnBase, opacity: page === totalPages ? 0.4 : 1, cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
-                    >
-                      <ChevronRight size={13} />
-                    </button>
-                  </div>
+                  {product.owner.initials}
                 </div>
-              )}
-            </>
+                <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--foreground)', fontWeight: 'var(--font-weight-semibold)' }}>
+                  {product.owner.name}
+                </span>
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <CalendarDays size={13} style={{ color: 'var(--muted-foreground)' }} />
+            <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>Updated:</span>
+            <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--foreground)' }}>{formatDate(product.updatedDate)}</span>
+          </div>
+          {product.tags.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <Tag size={13} style={{ color: 'var(--muted-foreground)' }} />
+              {product.tags.map(tag => (
+                <span
+                  key={tag}
+                  style={{
+                    height: '18px', padding: '0 8px',
+                    border: '1px solid var(--border)', borderRadius: '100px',
+                    fontFamily: 'var(--font-family-primary)', fontSize: '11px',
+                    color: 'var(--muted-foreground)', display: 'inline-flex', alignItems: 'center',
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {showModal && (
-        <RoadmapItemModal item={editingItem} onSave={handleSave} onCancel={() => setShowModal(false)} />
-      )}
-      {deleteTarget && (
-        <DeleteRoadmapItemDialog
-          itemName={deleteTarget.name}
-          onConfirm={() => handleDelete(deleteTarget)}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
-    </>
-  );
-}
-
-// ─── Associated Processes Tab ────────────────────────────────────────────────
-
-function AssociatedProcessesTab({
-  product,
-  resolvedAssociations,
-  allProcesses,
-  navigate,
-  onUpdateProduct,
-}: {
-  product: Product;
-  resolvedAssociations: { assoc: { processId: string; subProcessId?: string }; proc: Process | undefined; sub: any }[];
-  allProcesses: Process[];
-  navigate: (path: string) => void;
-  onUpdateProduct: (updated: Product) => void;
-}) {
-  const [showAddPicker, setShowAddPicker] = useState(false);
-  const [expandedProcessId, setExpandedProcessId] = useState<string | null>(null);
-  const [deletingAssoc, setDeletingAssoc] = useState<{ processId: string; subProcessId?: string } | null>(null);
-
-  const associations = product.processAssociations;
-
-  function handleAddAssociation(processId: string, subProcessId?: string) {
-    const newAssoc = subProcessId ? { processId, subProcessId } : { processId };
-    const exists = associations.some(
-      a => a.processId === processId && (a.subProcessId ?? undefined) === (subProcessId ?? undefined)
-    );
-    if (exists) return;
-    onUpdateProduct({
-      ...product,
-      processAssociations: [...associations, newAssoc],
-      updatedDate: new Date().toISOString(),
-    });
-  }
-
-  function handleRemoveAssociation(processId: string, subProcessId?: string) {
-    onUpdateProduct({
-      ...product,
-      processAssociations: associations.filter(
-        a => !(a.processId === processId && (a.subProcessId ?? undefined) === (subProcessId ?? undefined))
-      ),
-      updatedDate: new Date().toISOString(),
-    });
-    setDeletingAssoc(null);
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
-      {/* Toolbar */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          flexWrap: 'wrap',
-          background: 'var(--card)',
-          borderRadius: 'var(--radius-card) var(--radius-card) 0 0',
-          border: '1px solid var(--border)',
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Activity size={16} style={{ color: 'var(--primary)' }} />
-          <span
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--foreground)',
-            }}
-          >
-            Linked Processes & Sub-Processes
-          </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--muted-foreground)',
-              background: 'var(--muted)',
-              border: '1px solid var(--border)',
-              borderRadius: '100px',
-              padding: '1px 8px',
-              lineHeight: '18px',
-            }}
-          >
-            {resolvedAssociations.length}
-          </span>
-        </div>
-        <button
-          onClick={() => setShowAddPicker(o => !o)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            height: '32px',
-            padding: '0 12px',
-            border: 'none',
-            borderRadius: 'var(--radius-button)',
-            background: 'var(--primary)',
-            color: 'var(--primary-foreground)',
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: 'var(--text-base)',
-            fontWeight: 'var(--font-weight-semibold)',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-        >
-          <Plus size={14} /> Add Process
-        </button>
-      </div>
-
-      {/* ─── Add Process Picker ─────────────────────────────── */}
-      {showAddPicker && (
-        <div
-          style={{
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--muted)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          <div
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--muted-foreground)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              marginBottom: '4px',
-            }}
-          >
-            Select a Process or Sub-Process to Associate
-          </div>
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)',
-              background: 'var(--card)',
-              maxHeight: '260px',
-              overflowY: 'auto',
-            }}
-          >
-            {allProcesses.length === 0 ? (
-              <div
-                style={{
-                  padding: '16px',
-                  textAlign: 'center',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-regular)',
-                  color: 'var(--muted-foreground)',
-                }}
-              >
-                No processes available. Create processes in the Process Register first.
-              </div>
-            ) : (
-              allProcesses.map(proc => {
-                const hasSubs = (proc.subProcesses ?? []).length > 0;
-                const isExpanded = expandedProcessId === proc.id;
-                const procLevelLinked = associations.some(a => a.processId === proc.id && !a.subProcessId);
-                const statusColor = proc.status === 'Active' ? '#1C8A45' : proc.status === 'Draft' ? '#E07B00' : '#6B7489';
-                const statusBg = proc.status === 'Active' ? '#E8F5EE' : proc.status === 'Draft' ? '#FFF3E0' : '#F0F0F0';
-
-                return (
-                  <div key={proc.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px 12px',
-                      }}
-                    >
-                      {hasSubs ? (
-                        <button
-                          type="button"
-                          onClick={() => setExpandedProcessId(isExpanded ? null : proc.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            color: 'var(--muted-foreground)',
-                            flexShrink: 0,
-                          }}
-                        >
-                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                      ) : (
-                        <span style={{ width: '14px', flexShrink: 0 }} />
-                      )}
-
-                      <Activity size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                      <span
-                        style={{
-                          flex: 1,
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: 'var(--text-base)',
-                          fontWeight: 'var(--font-weight-semibold)',
-                          color: 'var(--foreground)',
-                        }}
-                      >
-                        {proc.name}
-                      </span>
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          height: '18px',
-                          padding: '0 6px',
-                          borderRadius: '100px',
-                          background: statusBg,
-                          color: statusColor,
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: '11px',
-                          fontWeight: 'var(--font-weight-semibold)',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {proc.status}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={procLevelLinked}
-                        onClick={() => handleAddAssociation(proc.id)}
-                        style={{
-                          height: '24px',
-                          padding: '0 10px',
-                          border: `1px solid ${procLevelLinked ? 'var(--border)' : 'var(--primary)'}`,
-                          borderRadius: 'var(--radius-button)',
-                          background: procLevelLinked ? 'var(--muted)' : 'transparent',
-                          color: procLevelLinked ? 'var(--muted-foreground)' : 'var(--primary)',
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: '12px',
-                          fontWeight: 'var(--font-weight-semibold)',
-                          cursor: procLevelLinked ? 'default' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {procLevelLinked ? 'Linked' : (<><Plus size={10} /> Add</>)}
-                      </button>
-                    </div>
-
-                    {/* Sub-process rows */}
-                    {isExpanded && hasSubs && (
-                      <div style={{ paddingLeft: '36px', borderTop: '1px solid var(--border)', background: 'var(--muted)' }}>
-                        {(proc.subProcesses ?? []).map(sp => {
-                          const subLinked = associations.some(a => a.processId === proc.id && a.subProcessId === sp.id);
-                          return (
-                            <div
-                              key={sp.id}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                padding: '6px 12px',
-                                borderBottom: '1px solid var(--border)',
-                              }}
-                            >
-                              <GitBranch size={12} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
-                              <span
-                                style={{
-                                  flex: 1,
-                                  fontFamily: 'var(--font-family-primary)',
-                                  fontSize: '12px',
-                                  fontWeight: 'var(--font-weight-regular)',
-                                  color: 'var(--foreground)',
-                                }}
-                              >
-                                {sp.name}
-                              </span>
-                              <button
-                                type="button"
-                                disabled={subLinked}
-                                onClick={() => handleAddAssociation(proc.id, sp.id)}
-                                style={{
-                                  height: '22px',
-                                  padding: '0 8px',
-                                  border: `1px solid ${subLinked ? 'var(--border)' : 'var(--primary)'}`,
-                                  borderRadius: 'var(--radius-button)',
-                                  background: subLinked ? 'var(--muted)' : 'transparent',
-                                  color: subLinked ? 'var(--muted-foreground)' : 'var(--primary)',
-                                  fontFamily: 'var(--font-family-primary)',
-                                  fontSize: '11px',
-                                  fontWeight: 'var(--font-weight-semibold)',
-                                  cursor: subLinked ? 'default' : 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {subLinked ? 'Linked' : (<><Plus size={9} /> Add</>)}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={() => { setShowAddPicker(false); setExpandedProcessId(null); }}
-              style={{
-                height: '28px',
-                padding: '0 12px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-button)',
-                background: 'var(--card)',
-                color: 'var(--foreground)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '12px',
-                fontWeight: 'var(--font-weight-semibold)',
-                cursor: 'pointer',
-              }}
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Association Cards ────────────────────────────── */}
-      {resolvedAssociations.length === 0 && !showAddPicker ? (
-        <div
-          style={{
-            background: 'var(--card)',
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-            borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-            padding: '48px 24px',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Activity size={48} style={{ color: 'var(--muted-foreground)' }} />
-          <h3
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '14px',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--foreground)',
-              margin: '0 0 4px 0',
-            }}
-          >
-            No process associations
-          </h3>
-          <p
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-regular)',
-              color: 'var(--muted-foreground)',
-              margin: 0,
-            }}
-          >
-            Associate this product with processes or sub-processes.
-          </p>
-          <button
-            onClick={() => setShowAddPicker(true)}
-            style={{
-              marginTop: '8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              border: 'none',
-              borderRadius: 'var(--radius-button)',
-              background: 'var(--primary)',
-              color: 'var(--primary-foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <Plus size={14} /> Add Process
-          </button>
-        </div>
-      ) : resolvedAssociations.length > 0 ? (
-        <div
-          style={{
-            background: 'var(--card)',
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-            borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          {resolvedAssociations.map((item, idx) => {
-            const proc = item.proc!;
-            const statusColor = proc.status === 'Active' ? '#1C8A45' : proc.status === 'Draft' ? '#E07B00' : '#6B7489';
-            const statusBg = proc.status === 'Active' ? '#E8F5EE' : proc.status === 'Draft' ? '#FFF3E0' : '#F0F0F0';
-            return (
-              <div
-                key={`${item.assoc.processId}-${item.assoc.subProcessId ?? 'root'}-${idx}`}
-                style={{
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-card)',
-                  padding: '12px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  transition: 'box-shadow 0.1s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-sm)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
-              >
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1, cursor: 'pointer' }}
-                  onClick={() => navigate(`/processes/${proc.id}`)}
-                >
-                  <Activity size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                  <div style={{ minWidth: 0 }}>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-family-primary)',
-                        fontSize: 'var(--text-base)',
-                        fontWeight: 'var(--font-weight-semibold)',
-                        color: 'var(--primary)',
-                      }}
-                    >
-                      {proc.name}
-                    </span>
-                    {item.sub && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                        <GitBranch size={10} style={{ color: 'var(--muted-foreground)' }} />
-                        <span
-                          style={{
-                            fontFamily: 'var(--font-family-primary)',
-                            fontSize: '12px',
-                            fontWeight: 'var(--font-weight-regular)',
-                            color: 'var(--muted-foreground)',
-                          }}
-                        >
-                          {item.sub.name}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      height: '20px',
-                      padding: '0 8px',
-                      borderRadius: '100px',
-                      background: statusBg,
-                      color: statusColor,
-                      fontFamily: 'var(--font-family-primary)',
-                      fontSize: '12px',
-                      fontWeight: 'var(--font-weight-semibold)',
-                    }}
-                  >
-                    {proc.status}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeletingAssoc({ processId: item.assoc.processId, subProcessId: item.assoc.subProcessId });
-                    }}
-                    title="Remove association"
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: 'var(--muted-foreground)',
-                      borderRadius: 'var(--radius-input)',
-                      transition: 'color 0.1s, background 0.1s',
-                    }}
-                    onMouseEnter={e => {
-                      (e.currentTarget as HTMLButtonElement).style.color = 'var(--destructive)';
-                      (e.currentTarget as HTMLButtonElement).style.background = 'rgba(192,57,43,0.06)';
-                    }}
-                    onMouseLeave={e => {
-                      (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)';
-                      (e.currentTarget as HTMLButtonElement).style.background = 'none';
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                  <ArrowRight
-                    size={14}
-                    style={{ color: 'var(--muted-foreground)', cursor: 'pointer' }}
-                    onClick={() => navigate(`/processes/${proc.id}`)}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {/* ─── Delete Confirmation Dialog ─────────────────── */}
-      {deletingAssoc && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            background: 'rgba(0,0,0,0.4)',
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setDeletingAssoc(null); }}
-        >
-          <div
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)',
-              boxShadow: '0px 8px 32px 0px rgba(0,0,0,0.18)',
-              width: '100%',
-              maxWidth: '420px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-            }}
-          >
-            <h3
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '18px',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--foreground)',
-                margin: 0,
-              }}
-            >
-              Remove Process Association
-            </h3>
-            <p
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-regular)',
-                color: 'var(--muted-foreground)',
-                margin: 0,
-                lineHeight: '22px',
-              }}
-            >
-              Are you sure you want to remove the association with{' '}
-              <strong style={{ color: 'var(--foreground)' }}>
-                {(() => {
-                  const proc = allProcesses.find(p => p.id === deletingAssoc.processId);
-                  const sub = deletingAssoc.subProcessId
-                    ? (proc?.subProcesses ?? []).find(sp => sp.id === deletingAssoc.subProcessId)
-                    : null;
-                  return sub ? `${proc?.name} / ${sub.name}` : proc?.name ?? deletingAssoc.processId;
-                })()}
-              </strong>
-              ?
-            </p>
-            <div
-              style={{
-                padding: '12px',
-                background: 'rgba(192,57,43,0.06)',
-                border: '1px solid rgba(192,57,43,0.2)',
-                borderRadius: 'var(--radius-card)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '12px',
-                fontWeight: 'var(--font-weight-regular)',
-                color: 'var(--destructive)',
-                lineHeight: '18px',
-              }}
-            >
-              This will unlink the process from this product. The process itself will not be deleted.
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '8px',
-              }}
-            >
-              <button
-                onClick={() => setDeletingAssoc(null)}
-                style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-button)',
-                  background: 'transparent',
-                  color: 'var(--foreground)',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRemoveAssociation(deletingAssoc.processId, deletingAssoc.subProcessId)}
-                style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  border: 'none',
-                  borderRadius: 'var(--radius-button)',
-                  background: 'var(--destructive)',
-                  color: 'var(--destructive-foreground)',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  cursor: 'pointer',
-                  transition: 'opacity 0.1s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Associated Vendors Tab ────────────────────────────────────────────────
-
-function AssociatedVendorsTab({
-  product,
-  vendors,
-  navigate,
-  onUpdateProduct,
-}: {
-  product: Product;
-  vendors: Vendor[];
-  navigate: (path: string) => void;
-  onUpdateProduct: (updated: Product) => void;
-}) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showAddPicker, setShowAddPicker] = useState(false);
-  const [deletingVendorId, setDeletingVendorId] = useState<string | null>(null);
-
-  const associations = product.vendorIds;
-
-  function handleAddAssociation(vendorId: string) {
-    const exists = associations.includes(vendorId);
-    if (exists) return;
-    onUpdateProduct({
-      ...product,
-      vendorIds: [...associations, vendorId],
-      updatedDate: new Date().toISOString(),
-    });
-  }
-
-  function handleRemoveAssociation(vendorId: string) {
-    onUpdateProduct({
-      ...product,
-      vendorIds: associations.filter(a => a !== vendorId),
-      updatedDate: new Date().toISOString(),
-    });
-    setDeletingVendorId(null);
-  }
-
-  const filteredVendors = vendors.filter(v => v.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0px' }}>
-      {/* Toolbar */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          flexWrap: 'wrap',
-          background: 'var(--card)',
-          borderRadius: 'var(--radius-card) var(--radius-card) 0 0',
-          border: '1px solid var(--border)',
-          borderBottomLeftRadius: 0,
-          borderBottomRightRadius: 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Building2 size={16} style={{ color: 'var(--primary)' }} />
-          <span
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--foreground)',
-            }}
-          >
-            Linked Vendors
-          </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--muted-foreground)',
-              background: 'var(--muted)',
-              border: '1px solid var(--border)',
-              borderRadius: '100px',
-              padding: '1px 8px',
-              lineHeight: '18px',
-            }}
-          >
-            {associations.length}
-          </span>
-        </div>
-        <button
-          onClick={() => setShowAddPicker(o => !o)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            height: '32px',
-            padding: '0 12px',
-            border: 'none',
-            borderRadius: 'var(--radius-button)',
-            background: 'var(--primary)',
-            color: 'var(--primary-foreground)',
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: 'var(--text-base)',
-            fontWeight: 'var(--font-weight-semibold)',
-            cursor: 'pointer',
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-        >
-          <Plus size={14} /> Add Vendor
-        </button>
-      </div>
-
-      {/* ─── Add Vendor Picker ─────────────────────────────── */}
-      {showAddPicker && (
-        <div
-          style={{
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--muted)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          <div
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '12px',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--muted-foreground)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              marginBottom: '4px',
-            }}
-          >
-            Select a Vendor to Associate
-          </div>
-          {/* Search box */}
-          <div style={{ position: 'relative' }}>
-            <Search
-              size={14}
-              style={{
-                position: 'absolute', left: '10px', top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--muted-foreground)', pointerEvents: 'none',
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Search by vendor name"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              style={{
-                width: '100%', height: '36px',
-                paddingLeft: '32px', paddingRight: '12px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-button)',
-                background: 'var(--card)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                color: 'var(--foreground)',
-                outline: 'none', boxSizing: 'border-box',
-              }}
-              onFocus={e => { (e.currentTarget as HTMLInputElement).style.borderColor = 'var(--primary)'; }}
-              onBlur={e => { (e.currentTarget as HTMLInputElement).style.borderColor = 'var(--border)'; }}
-            />
-          </div>
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)',
-              background: 'var(--card)',
-              maxHeight: '260px',
-              overflowY: 'auto',
-            }}
-          >
-            {filteredVendors.length === 0 ? (
-              <div
-                style={{
-                  padding: '16px',
-                  textAlign: 'center',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-regular)',
-                  color: 'var(--muted-foreground)',
-                }}
-              >
-                No vendors available. Create vendors in the Vendor Register first.
-              </div>
-            ) : (
-              filteredVendors.map(vendor => {
-                const isLinked = associations.includes(vendor.id);
-                return (
-                  <div key={vendor.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px 12px',
-                      }}
-                    >
-                      <Building2 size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                      <span
-                        style={{
-                          flex: 1,
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: 'var(--text-base)',
-                          fontWeight: 'var(--font-weight-semibold)',
-                          color: 'var(--foreground)',
-                        }}
-                      >
-                        {vendor.name}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isLinked}
-                        onClick={() => handleAddAssociation(vendor.id)}
-                        style={{
-                          height: '24px',
-                          padding: '0 10px',
-                          border: `1px solid ${isLinked ? 'var(--border)' : 'var(--primary)'}`,
-                          borderRadius: 'var(--radius-button)',
-                          background: isLinked ? 'var(--muted)' : 'transparent',
-                          color: isLinked ? 'var(--muted-foreground)' : 'var(--primary)',
-                          fontFamily: 'var(--font-family-primary)',
-                          fontSize: '12px',
-                          fontWeight: 'var(--font-weight-semibold)',
-                          cursor: isLinked ? 'default' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {isLinked ? 'Linked' : (<><Plus size={10} /> Add</>)}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              type="button"
-              onClick={() => { setShowAddPicker(false); setSearchTerm(''); }}
-              style={{
-                height: '28px',
-                padding: '0 12px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-button)',
-                background: 'var(--card)',
-                color: 'var(--foreground)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '12px',
-                fontWeight: 'var(--font-weight-semibold)',
-                cursor: 'pointer',
-              }}
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Association Cards ────────────────────────────── */}
-      {associations.length === 0 && !showAddPicker ? (
-        <div
-          style={{
-            background: 'var(--card)',
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-            borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-            padding: '48px 24px',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Building2 size={48} style={{ color: 'var(--muted-foreground)' }} />
-          <h3
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: '14px',
-              fontWeight: 'var(--font-weight-semibold)',
-              color: 'var(--foreground)',
-              margin: '0 0 4px 0',
-            }}
-          >
-            No vendor associations
-          </h3>
-          <p
-            style={{
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-regular)',
-              color: 'var(--muted-foreground)',
-              margin: 0,
-            }}
-          >
-            Associate this product with vendors.
-          </p>
-          <button
-            onClick={() => setShowAddPicker(true)}
-            style={{
-              marginTop: '8px',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              height: '36px',
-              padding: '0 16px',
-              border: 'none',
-              borderRadius: 'var(--radius-button)',
-              background: 'var(--primary)',
-              color: 'var(--primary-foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-          >
-            <Plus size={14} /> Add Vendor
-          </button>
-        </div>
-      ) : associations.length > 0 ? (
-        <div
-          style={{
-            background: 'var(--card)',
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            borderBottom: '1px solid var(--border)',
-            borderRadius: '0 0 var(--radius-card) var(--radius-card)',
-            padding: '16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-          }}
-        >
-          {associations.map((vendorId, idx) => {
-            const vendor = vendors.find(v => v.id === vendorId)!;
-            return (
-              <div
-                key={`${vendorId}-${idx}`}
-                style={{
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-card)',
-                  padding: '12px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                  transition: 'box-shadow 0.1s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-sm)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
-              >
-                <Building2 size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                {/* Vendor name link */}
-                <button
-                  type="button"
-                  onClick={() => navigate(`/vendors/${vendor.id}`)}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                    textAlign: 'left',
-                    fontFamily: 'var(--font-family-primary)',
-                    fontSize: 'var(--text-base)',
-                    fontWeight: 'var(--font-weight-semibold)',
-                    color: 'var(--primary)',
-                    flex: '0 0 auto',
-                    maxWidth: '240px',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {vendor.name}
-                </button>
-                {/* Status badge */}
-                {(() => {
-                  const statusStyles: Record<string, { background: string; color: string }> = {
-                    Active: { background: '#E8F5EE', color: '#1C8A45' },
-                    Inactive: { background: '#F0F0F0', color: '#6B7489' },
-                    'Pending Review': { background: '#FFF3E0', color: '#E07B00' },
-                    Terminating: { background: 'rgba(192,57,43,0.08)', color: '#C0392B' },
-                    'Selected Vendor': { background: 'rgba(35,34,240,0.08)', color: 'var(--primary)' },
-                  };
-                  const s = statusStyles[vendor.status] ?? statusStyles.Inactive;
-                  return (
-                    <span
-                      style={{
-                        display: 'inline-flex', alignItems: 'center',
-                        height: '20px', padding: '0 8px',
-                        borderRadius: '100px',
-                        background: s.background, color: s.color,
-                        fontFamily: 'var(--font-family-primary)',
-                        fontSize: '11px', fontWeight: 'var(--font-weight-semibold)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {vendor.status}
-                    </span>
-                  );
-                })()}
-                {/* Category metadata */}
-                <span
-                  style={{
-                    fontFamily: 'var(--font-family-primary)',
-                    fontSize: '12px',
-                    fontWeight: 'var(--font-weight-regular)',
-                    color: 'var(--muted-foreground)',
-                    flex: 1, minWidth: 0,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}
-                >
-                  {vendor.category}
-                </span>
-                {/* Unlink button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeletingVendorId(vendorId);
-                  }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '4px',
-                    height: '24px', padding: '0 8px',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-button)',
-                    background: 'transparent',
-                    color: 'var(--muted-foreground)',
-                    fontFamily: 'var(--font-family-primary)',
-                    fontSize: '11px', fontWeight: 'var(--font-weight-semibold)',
-                    cursor: 'pointer', flexShrink: 0,
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--destructive)';
-                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--destructive)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
-                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)';
-                  }}
-                >
-                  <X size={10} /> Unlink
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-
-      {/* ─── Delete Confirmation Dialog ─────────────────── */}
-      {deletingVendorId && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px',
-            background: 'rgba(0,0,0,0.4)',
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setDeletingVendorId(null); }}
-        >
-          <div
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)',
-              boxShadow: '0px 8px 32px 0px rgba(0,0,0,0.18)',
-              width: '100%',
-              maxWidth: '420px',
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-            }}
-          >
-            <h3
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '18px',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--foreground)',
-                margin: 0,
-              }}
-            >
-              Remove Vendor Association
-            </h3>
-            <p
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-regular)',
-                color: 'var(--muted-foreground)',
-                margin: 0,
-                lineHeight: '22px',
-              }}
-            >
-              Are you sure you want to remove the association with{' '}
-              <strong style={{ color: 'var(--foreground)' }}>
-                {(() => {
-                  const vendor = vendors.find(v => v.id === deletingVendorId);
-                  return vendor?.name ?? deletingVendorId;
-                })()}
-              </strong>
-              ?
-            </p>
-            <div
-              style={{
-                padding: '12px',
-                background: 'rgba(192,57,43,0.06)',
-                border: '1px solid rgba(192,57,43,0.2)',
-                borderRadius: 'var(--radius-card)',
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '12px',
-                fontWeight: 'var(--font-weight-regular)',
-                color: 'var(--destructive)',
-                lineHeight: '18px',
-              }}
-            >
-              This will unlink the vendor from this product. The vendor itself will not be deleted.
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                gap: '8px',
-              }}
-            >
-              <button
-                onClick={() => setDeletingVendorId(null)}
-                style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-button)',
-                  background: 'transparent',
-                  color: 'var(--foreground)',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRemoveAssociation(deletingVendorId)}
-                style={{
-                  height: '36px',
-                  padding: '0 16px',
-                  border: 'none',
-                  borderRadius: 'var(--radius-button)',
-                  background: 'var(--destructive)',
-                  color: 'var(--destructive-foreground)',
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  cursor: 'pointer',
-                  transition: 'opacity 0.1s',
-                }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Helper components ───────────────────────────────────────────────────────
-
-function MetadataChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        background: 'var(--muted)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-card)',
-        padding: '8px 12px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px',
-      }}
-    >
-      <span
-        style={{
-          fontFamily: 'var(--font-family-primary)',
-          fontSize: '10px',
-          fontWeight: 'var(--font-weight-semibold)',
-          color: 'var(--muted-foreground)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontFamily: 'var(--font-family-primary)',
-          fontSize: '12px',
-          fontWeight: 'var(--font-weight-semibold)',
-          color: 'var(--foreground)',
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function ReadOnlyCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        background: 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-card)',
-        padding: '12px 16px',
-      }}
-    >
-      <div
-        style={{
-          fontFamily: 'var(--font-family-primary)',
-          fontSize: '11px',
-          fontWeight: 'var(--font-weight-semibold)',
-          color: 'var(--muted-foreground)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          marginBottom: '4px',
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontFamily: 'var(--font-family-primary)',
-          fontSize: 'var(--text-base)',
-          fontWeight: 'var(--font-weight-regular)',
-          color: 'var(--foreground)',
-          lineHeight: '20px',
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
-// ─── Delete Confirmation Dialog ──────────────────────────────────────────────
-
-function DeleteConfirmDialog({
-  productName,
-  onConfirm,
-  onCancel,
-}: {
-  productName: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 50,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        background: 'rgba(0,0,0,0.4)',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
-    >
+      {/* ─── Plans Section ────────────────────────────────────────────────── */}
       <div
         style={{
           background: 'var(--card)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-card)',
-          boxShadow: '0px 8px 32px 0px rgba(0,0,0,0.18)',
-          width: '100%',
-          maxWidth: '420px',
-          padding: '24px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
+          boxShadow: 'var(--elevation-sm)',
+          overflow: 'hidden',
         }}
       >
-        <h3
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: '18px',
-            fontWeight: 'var(--font-weight-semibold)',
-            color: 'var(--foreground)',
-            margin: 0,
-          }}
-        >
-          Delete Product
-        </h3>
-        <p
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: 'var(--text-base)',
-            fontWeight: 'var(--font-weight-regular)',
-            color: 'var(--muted-foreground)',
-            margin: 0,
-            lineHeight: '22px',
-          }}
-        >
-          Are you sure you want to delete &quot;<strong style={{ color: 'var(--foreground)' }}>{productName}</strong>&quot;?
-          This action cannot be undone.
-        </p>
+        {/* Section toolbar */}
         <div
           style={{
+            padding: '14px 20px',
+            borderBottom: '1px solid var(--border)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'flex-end',
-            gap: '8px',
+            justifyContent: 'space-between',
+            gap: '12px',
           }}
         >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckCircle size={16} style={{ color: 'var(--primary)' }} />
+            <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>
+              Plans
+            </span>
+            <span
+              style={{
+                fontFamily: 'var(--font-family-primary)', fontSize: '12px',
+                fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)',
+                background: 'var(--muted)', border: '1px solid var(--border)',
+                borderRadius: '100px', padding: '1px 8px', lineHeight: '18px',
+              }}
+            >
+              {productPlans.length}
+            </span>
+          </div>
           <button
-            onClick={onCancel}
+            onClick={() => { setEditingPlan(null); setShowNewPlan(true); }}
             style={{
-              height: '36px', padding: '0 16px',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-button)',
-              background: 'transparent',
-              color: 'var(--foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            style={{
-              height: '36px', padding: '0 16px',
-              border: 'none',
-              borderRadius: 'var(--radius-button)',
-              background: 'var(--destructive)',
-              color: 'var(--destructive-foreground)',
-              fontFamily: 'var(--font-family-primary)',
-              fontSize: 'var(--text-base)',
-              fontWeight: 'var(--font-weight-semibold)',
-              cursor: 'pointer',
-              transition: 'opacity 0.1s',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              height: '32px', padding: '0 12px', border: 'none',
+              borderRadius: 'var(--radius-button)', background: 'var(--primary)',
+              color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)',
+              fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
           >
-            Delete
+            <Plus size={14} /> New Plan
           </button>
         </div>
+
+        {/* Plan rows */}
+        {productPlans.length === 0 ? (
+          <div
+            style={{
+              padding: '48px 24px',
+              textAlign: 'center',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+            }}
+          >
+            <Package size={40} style={{ color: 'var(--muted-foreground)' }} />
+            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>
+              No plans yet
+            </div>
+            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>
+              Create the first plan for this product.
+            </div>
+            <button
+              onClick={() => { setEditingPlan(null); setShowNewPlan(true); }}
+              style={{
+                marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                height: '36px', padding: '0 16px', border: 'none',
+                borderRadius: 'var(--radius-button)', background: 'var(--primary)',
+                color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)',
+                fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+            >
+              <Plus size={14} /> New Plan
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {productPlans.map((plan, idx) => (
+              <div
+                key={plan.id}
+                style={{
+                  borderBottom: idx < productPlans.length - 1 ? '1px solid var(--border)' : 'none',
+                  padding: '12px 20px',
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  cursor: 'pointer', transition: 'background 0.1s',
+                }}
+                onClick={() => navigate(`/plans/${plan.id}`)}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--muted)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
+                        fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)',
+                      }}
+                    >
+                      {plan.name}
+                    </span>
+                    <PlanStatusBadge status={plan.status} />
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '2px' }}>
+                    {plan.id}
+                    {plan.effectiveStartDate && ` · From ${formatDate(plan.effectiveStartDate)}`}
+                    {plan.effectiveEndDate && ` to ${formatDate(plan.effectiveEndDate)}`}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setEditingPlan(plan); setShowNewPlan(true); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '28px', height: '28px', border: 'none',
+                    borderRadius: 'var(--radius-input)', background: 'transparent',
+                    color: 'var(--muted-foreground)', cursor: 'pointer', padding: 0,
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--border)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                >
+                  <Edit2 size={13} />
+                </button>
+                <ChevronRight size={14} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* ─── Employers Section ───────────────────────────────────────────── */}
+      {(() => {
+        const linkedEmployers = employers.filter(e => (e.productIds ?? []).includes(id ?? ''));
+        const linkedIds = new Set(linkedEmployers.map(e => e.id));
+        const filteredLinked = linkedEmployers.filter(e =>
+          !employerSearch || e.name.toLowerCase().includes(employerSearch.toLowerCase()),
+        );
+        const linkableEmployers = employers.filter(e =>
+          !linkedIds.has(e.id) &&
+          (!empLinkSearch || e.name.toLowerCase().includes(empLinkSearch.toLowerCase())),
+        );
+
+        return (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-sm)', overflow: 'hidden' }}>
+            {/* Toolbar */}
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Briefcase size={16} style={{ color: 'var(--primary)' }} />
+                <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>
+                  Employers
+                </span>
+                <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', background: 'var(--muted)', border: '1px solid var(--border)', borderRadius: '100px', padding: '1px 8px', lineHeight: '18px' }}>
+                  {linkedEmployers.length}
+                </span>
+              </div>
+              <button
+                onClick={() => { setShowEmpLink(p => !p); setEmpLinkSearch(''); }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+              >
+                <Plus size={14} /> Link Employer
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Inline link picker */}
+              {showEmpLink && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', background: 'var(--card)', overflow: 'hidden' }}>
+                  <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--muted)' }}>
+                    <Search size={13} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
+                    <input
+                      autoFocus
+                      value={empLinkSearch}
+                      onChange={e => setEmpLinkSearch(e.target.value)}
+                      placeholder="Search employers to link..."
+                      style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--foreground)' }}
+                    />
+                    <button
+                      onClick={() => setShowEmpLink(false)}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', border: 'none', borderRadius: '4px', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' }}
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                  {linkableEmployers.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>
+                      {empLinkSearch ? 'No matching employers.' : 'All employers are already linked.'}
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {linkableEmployers.map(e => (
+                        <div
+                          key={e.id}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+                          onMouseEnter={ev => (ev.currentTarget.style.background = 'var(--muted)')}
+                          onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                          onClick={() => handleLinkEmployer(e.id)}
+                        >
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>{e.name}</div>
+                            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>{e.code} · {e.isActive ? 'Active' : 'Inactive'}</div>
+                          </div>
+                          <Plus size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Filter for long lists */}
+              {linkedEmployers.length > 5 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-input)', padding: '5px 10px', background: 'var(--card)' }}>
+                  <Search size={13} style={{ color: 'var(--muted-foreground)' }} />
+                  <input
+                    value={employerSearch}
+                    onChange={e => setEmployerSearch(e.target.value)}
+                    placeholder="Filter employers..."
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--foreground)' }}
+                  />
+                </div>
+              )}
+
+              {/* Employer list */}
+              {linkedEmployers.length === 0 ? (
+                <div style={{ padding: '32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <Briefcase size={36} style={{ color: 'var(--muted-foreground)' }} />
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>No employers linked</div>
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>Click "Link Employer" to associate employers with this product.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {filteredLinked.map((e, idx) => (
+                    <div
+                      key={e.id}
+                      style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '9px 0', borderBottom: idx < filteredLinked.length - 1 ? '1px solid var(--border)' : 'none' }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span
+                            style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            onClick={() => navigate(`/employers/${e.id}`)}
+                          >
+                            {e.name}
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', height: '18px', padding: '0 7px', borderRadius: '100px', background: e.isActive ? '#E8F5EE' : '#F0F2F7', color: e.isActive ? '#1C8A45' : '#6B7489', fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {e.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '1px' }}>{e.code}</div>
+                      </div>
+                      <button
+                        title="Remove employer link"
+                        onClick={() => handleUnlinkEmployer(e.id)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', border: 'none', borderRadius: 'var(--radius-input)', background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', flexShrink: 0 }}
+                        onMouseEnter={ev => { ev.currentTarget.style.background = 'rgba(192,57,43,0.08)'; ev.currentTarget.style.color = 'var(--destructive)'; }}
+                        onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent'; ev.currentTarget.style.color = 'var(--muted-foreground)'; }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ─── Edit Product Modal ───────────────────────────────────────────── */}
+      <ProductFormModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        onSave={handleSaveProduct}
+        editingProduct={product}
+      />
+
+      {/* ─── Plan Form Modal ──────────────────────────────────────────────── */}
+      <PlanFormModal
+        isOpen={showNewPlan}
+        onClose={() => { setShowNewPlan(false); setEditingPlan(null); }}
+        onSave={handlePlanSaved}
+        editingPlan={editingPlan ?? undefined}
+        defaultProductId={product.id}
+      />
+
+      {/* ─── Delete Confirm ───────────────────────────────────────────────── */}
+      {deleteConfirmOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 50,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px', background: 'rgba(0,0,0,0.4)',
+          }}
+          onClick={() => setDeleteConfirmOpen(false)}
+        >
+          <div
+            style={{
+              background: 'var(--card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-card)', boxShadow: '0px 8px 32px 0px rgba(0,0,0,0.18)',
+              width: '100%', maxWidth: '420px', padding: '24px',
+              display: 'flex', flexDirection: 'column', gap: '16px',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontFamily: 'var(--font-family-primary)', fontSize: '18px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', margin: 0 }}>
+              Delete Product
+            </h3>
+            <p style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)', margin: 0, lineHeight: '22px' }}>
+              Are you sure you want to delete <strong style={{ color: 'var(--foreground)' }}>{product.name}</strong>?
+              Plans within this product will not be deleted. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => setDeleteConfirmOpen(false)}
+                style={{
+                  height: '36px', padding: '0 16px', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-button)', background: 'transparent',
+                  color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)',
+                  fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                style={{
+                  height: '36px', padding: '0 16px', border: 'none',
+                  borderRadius: 'var(--radius-button)', background: 'var(--destructive)',
+                  color: 'var(--destructive-foreground)', fontFamily: 'var(--font-family-primary)',
+                  fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer',
+                  transition: 'opacity 0.1s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

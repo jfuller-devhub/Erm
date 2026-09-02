@@ -15,6 +15,7 @@ export interface Employer {
   code: string;
   name: string;
   isActive: boolean;
+  productIds: string[];
   createdAt: string;
   createdBy: string;
   modifiedAt: string;
@@ -83,6 +84,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'DMBA-001',
     name: 'DMBA',
     isActive: true,
+    productIds: ['PRD-001', 'PRD-002', 'PRD-003', 'PRD-004', 'PRD-005', 'PRD-006', 'PRD-007', 'PRD-008', 'PRD-009'],
     createdAt: '2024-01-15',
     createdBy: 'Admin',
     modifiedAt: '2025-11-02',
@@ -93,6 +95,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'BRIG-001',
     name: 'Brigham Young University',
     isActive: true,
+    productIds: ['PRD-001', 'PRD-002', 'PRD-003', 'PRD-004', 'PRD-005', 'PRD-006', 'PRD-007'],
     createdAt: '2024-01-15',
     createdBy: 'Admin',
     modifiedAt: '2025-06-10',
@@ -103,6 +106,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'LDSE-001',
     name: 'The Church of Jesus Christ of Latter-day Saints',
     isActive: true,
+    productIds: ['PRD-001', 'PRD-002', 'PRD-003', 'PRD-004', 'PRD-005', 'PRD-006'],
     createdAt: '2024-01-15',
     createdBy: 'Admin',
     modifiedAt: '2025-09-18',
@@ -113,6 +117,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'BYUI-001',
     name: 'BYU-Idaho',
     isActive: true,
+    productIds: ['PRD-001', 'PRD-002', 'PRD-004', 'PRD-005', 'PRD-006'],
     createdAt: '2024-03-01',
     createdBy: 'Jane Smith',
     modifiedAt: '2025-07-22',
@@ -123,6 +128,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'BYUH-001',
     name: 'BYU-Hawaii',
     isActive: true,
+    productIds: ['PRD-001', 'PRD-002', 'PRD-004', 'PRD-005'],
     createdAt: '2024-03-01',
     createdBy: 'Jane Smith',
     modifiedAt: '2025-07-22',
@@ -133,6 +139,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'ENSL-001',
     name: 'Ensign College',
     isActive: true,
+    productIds: ['PRD-001', 'PRD-002', 'PRD-004', 'PRD-006'],
     createdAt: '2024-04-10',
     createdBy: 'Admin',
     modifiedAt: '2025-08-14',
@@ -143,6 +150,7 @@ const SEED_EMPLOYERS: Employer[] = [
     code: 'DESE-001',
     name: 'Deseret Management Corporation',
     isActive: false,
+    productIds: ['PRD-001', 'PRD-004'],
     createdAt: '2024-02-20',
     createdBy: 'Admin',
     modifiedAt: '2025-01-05',
@@ -161,7 +169,7 @@ const SEED_RELATIONSHIPS: EmployerRelationship[] = [
 
 // ─── LocalStorage helpers ─────────────────────────────────────────────────────
 
-const EMPLOYERS_KEY      = 'erm_employers_v1';
+const EMPLOYERS_KEY      = 'erm_employers_v2';
 const RELATIONSHIPS_KEY  = 'erm_employer_relationships_v1';
 
 function sanitizeEmployer(e: any): Employer {
@@ -170,6 +178,7 @@ function sanitizeEmployer(e: any): Employer {
     code:       e.code       ?? '',
     name:       e.name       ?? '',
     isActive:   typeof e.isActive === 'boolean' ? e.isActive : true,
+    productIds: Array.isArray(e.productIds) ? e.productIds : [],
     createdAt:  e.createdAt  ?? new Date().toISOString().split('T')[0],
     createdBy:  e.createdBy  ?? 'System',
     modifiedAt: e.modifiedAt ?? new Date().toISOString().split('T')[0],

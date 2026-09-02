@@ -49,8 +49,8 @@ export interface Vendor {
   baaRequired: boolean;
   individualsInvolved: AppUser[];
   processAssociations: VendorProcessAssociation[];
-  // Product associations
-  productIds: string[];
+  // Plan associations (which benefit plans this vendor supports)
+  planIds: string[];
 }
 
 export interface Contract {
@@ -190,7 +190,7 @@ export const INITIAL_VENDORS: Vendor[] = [
       { processId: 'PRC-001' },
       { processId: 'PRC-002' },
     ],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-002',
@@ -215,7 +215,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     processAssociations: [
       { processId: 'PRC-002' },
     ],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-003',
@@ -238,7 +238,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     baaRequired: false,
     individualsInvolved: [],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-004',
@@ -261,7 +261,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     baaRequired: false,
     individualsInvolved: [MOCK_USERS[1]],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-005',
@@ -287,7 +287,7 @@ export const INITIAL_VENDORS: Vendor[] = [
       { processId: 'PRC-003' },
       { processId: 'PRC-005' },
     ],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-006',
@@ -310,7 +310,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     baaRequired: false,
     individualsInvolved: [MOCK_USERS[0], MOCK_USERS[1]],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-007',
@@ -333,7 +333,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     baaRequired: false,
     individualsInvolved: [],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-008',
@@ -358,7 +358,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     processAssociations: [
       { processId: 'PRC-001' },
     ],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-009',
@@ -381,7 +381,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     baaRequired: false,
     individualsInvolved: [MOCK_USERS[2]],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-010',
@@ -406,7 +406,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     processAssociations: [
       { processId: 'PRC-002' },
     ],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-011',
@@ -431,7 +431,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     processAssociations: [
       { processId: 'PRC-004' },
     ],
-    productIds: [],
+    planIds: [],
   },
   {
     id: 'VEN-012',
@@ -454,7 +454,7 @@ export const INITIAL_VENDORS: Vendor[] = [
     baaRequired: false,
     individualsInvolved: [MOCK_USERS[1]],
     processAssociations: [],
-    productIds: [],
+    planIds: [],
   },
 ];
 

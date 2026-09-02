@@ -65,7 +65,12 @@ export function EmployerFormModal({ isOpen, onClose, onSave, initialData, allEmp
 
   function handleSubmit() {
     if (!validate()) return;
-    onSave({ name: form.name.trim(), code: form.code.trim().toUpperCase(), isActive: form.isActive });
+    onSave({
+      name: form.name.trim(),
+      code: form.code.trim().toUpperCase(),
+      isActive: form.isActive,
+      productIds: initialData?.productIds ?? [],
+    });
   }
 
   const inputStyle: React.CSSProperties = {

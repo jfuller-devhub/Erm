@@ -32,7 +32,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     groupLabel: 'Operations',
     items: [
-      { path: '/products',  label: 'Benefits or Services Register', icon: Package },
+      { path: '/products',  label: 'Products Register', icon: Package },
       { path: '/processes', label: 'Process Register', icon: Activity },
     ],
   },
@@ -82,8 +82,11 @@ function getBreadcrumbs(pathname: string) {
     crumbs.push({ label: 'Process Register', path: '/processes' });
     if (pathname !== '/processes') crumbs.push({ label: 'Process Detail', path: pathname });
   } else if (pathname.startsWith('/products')) {
-    crumbs.push({ label: 'Benefits or Services Register', path: '/products' });
-    if (pathname !== '/products') crumbs.push({ label: 'Benefit or Service Detail', path: pathname });
+    crumbs.push({ label: 'Products Register', path: '/products' });
+    if (pathname !== '/products') crumbs.push({ label: 'Product Detail', path: pathname });
+  } else if (pathname.startsWith('/plans')) {
+    crumbs.push({ label: 'Products Register', path: '/products' });
+    crumbs.push({ label: 'Plan Detail', path: pathname });
   } else if (pathname.startsWith('/configuration')) {
     crumbs.push({ label: 'Configuration', path: '/configuration' });
   } else if (pathname.startsWith('/risk-dashboard')) {

@@ -11,8 +11,8 @@ import { loadProcessRiskLinks } from '../data/processRiskData';
 import { loadProcessControlLinks } from '../data/processControlData';
 import type { Process, ProcessStatus, SubProcess, Step, StepType } from '../data/processData';
 import { loadProcesses, saveProcesses } from '../data/processData';
-import type { Product } from '../data/productData';
-import { loadProducts } from '../data/productData';
+import type { Plan } from '../data/planData';
+import { loadPlans } from '../data/planData';
 import { formatDate, generateId } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 
@@ -81,7 +81,7 @@ function StepTypeBadge({ type }: { type: string }) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Sub-Processes', 'Risks', 'Controls', 'Dependencies', 'Benefits or Services', 'Vendors'] as const;
+const TABS = ['Overview', 'Sub-Processes', 'Risks', 'Controls', 'Dependencies', 'Plans', 'Vendors'] as const;
 type TabKey = typeof TABS[number];
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
@@ -457,9 +457,9 @@ export function ProcessDetail() {
                 {deps.length}
               </span>
             )}
-            {tab === 'Benefits or Services' && (() => {
-              const count = loadProducts().filter(p =>
-                p.processAssociations.some(a => a.processId === process.id)
+            {tab === 'Plans' && (() => {
+              const count = loadPlans().filter(p =>
+                (p.processAssociations ?? []).some((a: { processId: string }) => a.processId === process.id)
               ).length;
               return count > 0 ? (
                 <span
@@ -532,8 +532,8 @@ export function ProcessDetail() {
         <DependenciesTab deps={deps} navigate={navigate} />
       )}
 
-      {activeTab === 'Benefits or Services' && (
-        <ProductsTab process={process} />
+      {activeTab === 'Plans' && (
+        <PlansTab process={process} />
       )}
 
       {activeTab === 'Vendors' && (
@@ -1759,17 +1759,16 @@ function DependenciesTab({ deps, navigate }: { deps: Process[]; navigate: (path:
   );
 }
 
-// ─── Products Tab ────────────────────────────────────────────────────────────
+// ─── Plans Tab ───────────────────────────────────────────────────────────────
 
-function ProductsTab({ process }: { process: Process }) {
+function PlansTab({ process }: { process: Process }) {
   const navigate = useNavigate();
-  const allProducts = loadProducts();
-  // Find products that reference this process (at process or sub-process level)
-  const products = allProducts.filter(p =>
-    p.processAssociations.some(a => a.processId === process.id)
+  const allPlans = loadPlans();
+  const plans = allPlans.filter(p =>
+    (p.processAssociations ?? []).some((a: { processId: string }) => a.processId === process.id)
   );
 
-  if (products.length === 0) {
+  if (plans.length === 0) {
     return (
       <div
         style={{
@@ -1790,7 +1789,7 @@ function ProductsTab({ process }: { process: Process }) {
             margin: '0 0 4px 0',
           }}
         >
-          No benefits or services associated
+          No plans associated
         </h3>
         <p
           style={{
@@ -1801,7 +1800,7 @@ function ProductsTab({ process }: { process: Process }) {
             margin: 0,
           }}
         >
-          Benefits or services can be linked to this process from the Benefits or Services Register.
+          Plans can be linked to this process via the Process Associations section in each plan.
         </p>
       </div>
     );
@@ -1819,7 +1818,7 @@ function ProductsTab({ process }: { process: Process }) {
             color: 'var(--foreground)',
           }}
         >
-          Associated Benefits or Services
+          Associated Plans
         </span>
         <span
           style={{
@@ -1834,80 +1833,57 @@ function ProductsTab({ process }: { process: Process }) {
             lineHeight: '18px',
           }}
         >
-          {products.length}
+          {plans.length}
         </span>
       </div>
 
-      {products.map(product => {
-        const TypeIcon = product.type === 'Benefit' ? Heart : Briefcase;
-        const typeColor = product.type === 'Benefit' ? '#1C8A45' : '#00A3A3';
-        const typeBg = product.type === 'Benefit' ? '#E8F5EE' : '#E0F5F5';
-        return (
-          <div
-            key={product.id}
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-card)',
-              padding: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '16px',
-              cursor: 'pointer',
-              transition: 'box-shadow 0.1s',
-            }}
-            onClick={() => navigate(`/products/${product.id}`)}
-            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-sm)'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-              <Package size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-              <span
-                style={{
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: 'var(--text-base)',
-                  fontWeight: 'var(--font-weight-semibold)',
-                  color: 'var(--primary)',
-                }}
-              >
-                {product.name}
-              </span>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  height: '20px',
-                  padding: '0 8px',
-                  borderRadius: '100px',
-                  background: typeBg,
-                  color: typeColor,
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: '12px',
-                  fontWeight: 'var(--font-weight-semibold)',
-                }}
-              >
-                <TypeIcon size={10} />
-                {product.type}
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-              <span
-                style={{
-                  fontFamily: 'var(--font-family-primary)',
-                  fontSize: '12px',
-                  fontWeight: 'var(--font-weight-regular)',
-                  color: 'var(--muted-foreground)',
-                }}
-              >
-                {product.category}
-              </span>
-              <ArrowRight size={14} style={{ color: 'var(--muted-foreground)' }} />
-            </div>
+      {plans.map(plan => (
+        <div
+          key={plan.id}
+          style={{
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-card)',
+            padding: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            cursor: 'pointer',
+            transition: 'box-shadow 0.1s',
+          }}
+          onClick={() => navigate(`/plans/${plan.id}`)}
+          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-sm)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <Package size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+            <span
+              style={{
+                fontFamily: 'var(--font-family-primary)',
+                fontSize: 'var(--text-base)',
+                fontWeight: 'var(--font-weight-semibold)',
+                color: 'var(--primary)',
+              }}
+            >
+              {plan.name}
+            </span>
           </div>
-        );
-      })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+            <span
+              style={{
+                fontFamily: 'var(--font-family-primary)',
+                fontSize: '12px',
+                fontWeight: 'var(--font-weight-regular)',
+                color: 'var(--muted-foreground)',
+              }}
+            >
+              {plan.status}
+            </span>
+            <ArrowRight size={14} style={{ color: 'var(--muted-foreground)' }} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

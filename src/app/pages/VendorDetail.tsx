@@ -13,15 +13,15 @@ import { UserChip } from '../components/shared/UserPicker';
 import { VendorRisksTab } from '../components/vendors/VendorRisksTab';
 import { formatDate, formatCurrency, Contract, VendorContact } from '../data/mockData';
 import { loadProcesses } from '../data/processData';
-import { loadProducts } from '../data/productData';
-import type { Product } from '../data/productData';
-import { syncVendorProductLinks } from '../data/syncUtils';
+import { loadPlans } from '../data/planData';
+import type { Plan } from '../data/planData';
+import { syncVendorPlanLinks } from '../data/syncUtils';
 import { loadRisks } from '../data/riskData';
 import type { Risk } from '../data/riskData';
 import { loadVendorRisks, saveVendorRisks, getRiskCountForVendor } from '../data/vendorRiskData';
 import type { VendorRisk } from '../data/vendorRiskData';
 
-const TABS = ['Details', 'Contacts', 'Contracts', 'Processes', 'Benefits or Services', 'Risks', 'Activity'] as const;
+const TABS = ['Details', 'Contacts', 'Contracts', 'Processes', 'Plans', 'Risks', 'Activity'] as const;
 type Tab = typeof TABS[number];
 
 export function VendorDetail() {
@@ -38,8 +38,8 @@ export function VendorDetail() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showAddContract, setShowAddContract] = useState(false);
-  const [linkedProducts, setLinkedProducts] = useState<Product[]>([]);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [linkedPlans, setLinkedPlans] = useState<Plan[]>([]);
+  const [allPlans, setAllPlans] = useState<Plan[]>([]);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [vendorRisks, setVendorRisks] = useState<VendorRisk[]>([]);
 
@@ -49,13 +49,13 @@ export function VendorDetail() {
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
   const [removingContractId, setRemovingContractId] = useState<string | null>(null);
 
-  // Load linked products from localStorage whenever vendor.productIds changes
+  // Load linked plans from localStorage whenever vendor.planIds changes
   useEffect(() => {
     if (!vendor) return;
-    const all = loadProducts();
-    setAllProducts(all);
-    setLinkedProducts(all.filter(p => (vendor.productIds ?? []).includes(p.id)));
-  }, [vendor?.productIds?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+    const all = loadPlans();
+    setAllPlans(all);
+    setLinkedPlans(all.filter(p => (vendor.planIds ?? []).includes(p.id)));
+  }, [vendor?.planIds?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load risks and vendor-risk links
   useEffect(() => {
@@ -318,7 +318,7 @@ export function VendorDetail() {
                   {(vendor.processAssociations ?? []).length}
                 </span>
               )}
-              {tab === 'Benefits or Services' && (vendor.productIds ?? []).length > 0 && (
+              {tab === 'Plans' && (vendor.planIds ?? []).length > 0 && (
                 <span
                   style={{
                     marginLeft: '6px',
@@ -330,7 +330,7 @@ export function VendorDetail() {
                     fontWeight: 'var(--font-weight-semibold)',
                   }}
                 >
-                  {(vendor.productIds ?? []).length}
+                  {(vendor.planIds ?? []).length}
                 </span>
               )}
             </button>
@@ -871,12 +871,12 @@ export function VendorDetail() {
             />
           )}
 
-          {/* ── Benefits or Services Tab ──────────────────────────────── */}
-          {activeTab === 'Benefits or Services' && (
-            <VendorProductsTab
+          {/* ── Plans Tab ────────────────────────────────────────────── */}
+          {activeTab === 'Plans' && (
+            <VendorPlansTab
               vendor={vendor}
-              allProducts={allProducts}
-              linkedProducts={linkedProducts}
+              allPlans={allPlans}
+              linkedPlans={linkedPlans}
               navigate={navigate}
               onUpdateVendor={(changes) => updateVendor(vendor.id, changes)}
             />
@@ -2025,59 +2025,58 @@ function VendorProcessesTab({ vendor, navigate, onUpdateVendor }: { vendor: impo
   );
 }
 
-// ── Products Tab Component ────────────────────────────────────────────────────
+// ── Plans Tab Component ───────────────────────────────────────────────────────
 
-const PRODUCT_STATUS_STYLE: Record<string, { background: string; color: string }> = {
-  Active:  { background: '#E8F5EE', color: '#1C8A45' },
-  Draft:   { background: '#FFF3E0', color: '#E07B00' },
-  Retired: { background: '#F0F0F0', color: '#6B7489' },
-  Sunset:  { background: '#FDE8E8', color: '#C0392B' },
+const PLAN_STATUS_STYLE: Record<string, { background: string; color: string }> = {
+  Active:    { background: '#E8F5EE', color: '#1C8A45' },
+  Draft:     { background: '#FFF3E0', color: '#E07B00' },
+  Inactive:  { background: '#F0F0F0', color: '#6B7489' },
+  Archived:  { background: '#FDE8E8', color: '#C0392B' },
 };
 
-function VendorProductsTab({
+function VendorPlansTab({
   vendor,
-  allProducts,
-  linkedProducts,
+  allPlans,
+  linkedPlans,
   navigate,
   onUpdateVendor,
 }: {
   vendor: import('../data/mockData').Vendor;
-  allProducts: Product[];
-  linkedProducts: Product[];
+  allPlans: Plan[];
+  linkedPlans: Plan[];
   navigate: (path: string) => void;
   onUpdateVendor: (changes: Partial<import('../data/mockData').Vendor>) => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [removingProductId, setRemovingProductId] = useState<string | null>(null);
+  const [removingPlanId, setRemovingPlanId] = useState<string | null>(null);
 
-  const currentProductIds = vendor.productIds ?? [];
+  const currentPlanIds = vendor.planIds ?? [];
 
-  function handleLink(productId: string) {
-    if (currentProductIds.includes(productId)) return;
-    const newIds = [...currentProductIds, productId];
-    onUpdateVendor({ productIds: newIds });
-    syncVendorProductLinks(vendor.id, newIds, currentProductIds);
+  function handleLink(planId: string) {
+    if (currentPlanIds.includes(planId)) return;
+    const newIds = [...currentPlanIds, planId];
+    onUpdateVendor({ planIds: newIds });
+    syncVendorPlanLinks(vendor.id, newIds, currentPlanIds);
   }
 
-  function handleUnlink(productId: string) {
-    const newIds = currentProductIds.filter(id => id !== productId);
-    onUpdateVendor({ productIds: newIds });
-    syncVendorProductLinks(vendor.id, newIds, currentProductIds);
-    setRemovingProductId(null);
+  function handleUnlink(planId: string) {
+    const newIds = currentPlanIds.filter(id => id !== planId);
+    onUpdateVendor({ planIds: newIds });
+    syncVendorPlanLinks(vendor.id, newIds, currentPlanIds);
+    setRemovingPlanId(null);
   }
 
-  const filteredProducts = allProducts.filter(p => {
+  const filteredPlans = allPlans.filter(p => {
     const q = searchQuery.toLowerCase();
     return (
       p.name.toLowerCase().includes(q) ||
-      p.type.toLowerCase().includes(q) ||
-      p.category.toLowerCase().includes(q)
+      p.status.toLowerCase().includes(q)
     );
   });
 
-  const productToRemove = removingProductId
-    ? linkedProducts.find(p => p.id === removingProductId)
+  const planToRemove = removingPlanId
+    ? linkedPlans.find(p => p.id === removingPlanId)
     : null;
 
   return (
@@ -2104,7 +2103,7 @@ function VendorProductsTab({
               color: 'var(--foreground)',
             }}
           >
-            Linked Benefits or Services
+            Linked Plans
           </span>
           <span
             style={{
@@ -2119,7 +2118,7 @@ function VendorProductsTab({
               lineHeight: '18px',
             }}
           >
-            {linkedProducts.length}
+            {linkedPlans.length}
           </span>
         </div>
         <button
@@ -2142,7 +2141,7 @@ function VendorProductsTab({
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
         >
-          <Plus size={14} /> Add Service
+          <Plus size={14} /> Add Plan
         </button>
       </div>
 
@@ -2168,7 +2167,7 @@ function VendorProductsTab({
               letterSpacing: '0.05em',
             }}
           >
-            Select a Benefit or Service to Associate
+            Select a Plan to Associate
           </div>
 
           {/* Search box */}
@@ -2186,7 +2185,7 @@ function VendorProductsTab({
             />
             <input
               type="text"
-              placeholder="Search by name, type or category"
+              placeholder="Search by name or status"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               style={{
@@ -2218,7 +2217,7 @@ function VendorProductsTab({
               overflowY: 'auto',
             }}
           >
-            {filteredProducts.length === 0 ? (
+            {filteredPlans.length === 0 ? (
               <div
                 style={{
                   padding: '24px 16px',
@@ -2228,23 +2227,23 @@ function VendorProductsTab({
                   color: 'var(--muted-foreground)',
                 }}
               >
-                {allProducts.length === 0
-                  ? 'No benefits or services available. Create them in the Benefits or Services Register first.'
-                  : 'No benefits or services match your search.'}
+                {allPlans.length === 0
+                  ? 'No plans available. Create them first in the Products Register.'
+                  : 'No plans match your search.'}
               </div>
             ) : (
-              filteredProducts.map((prod, idx) => {
-                const isLinked = currentProductIds.includes(prod.id);
-                const ss = PRODUCT_STATUS_STYLE[prod.status] ?? PRODUCT_STATUS_STYLE.Retired;
+              filteredPlans.map((plan, idx) => {
+                const isLinked = currentPlanIds.includes(plan.id);
+                const ss = PLAN_STATUS_STYLE[plan.status] ?? PLAN_STATUS_STYLE.Inactive;
                 return (
                   <div
-                    key={prod.id}
+                    key={plan.id}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '10px',
                       padding: '9px 12px',
-                      borderBottom: idx < filteredProducts.length - 1 ? '1px solid var(--border)' : 'none',
+                      borderBottom: idx < filteredPlans.length - 1 ? '1px solid var(--border)' : 'none',
                     }}
                   >
                     <Package size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
@@ -2260,7 +2259,7 @@ function VendorProductsTab({
                           whiteSpace: 'nowrap',
                         }}
                       >
-                        {prod.name}
+                        {plan.name}
                       </div>
                       <div
                         style={{
@@ -2270,7 +2269,7 @@ function VendorProductsTab({
                           color: 'var(--muted-foreground)',
                         }}
                       >
-                        {prod.type} &middot; {prod.category}
+                        {plan.id}
                       </div>
                     </div>
                     <span
@@ -2288,12 +2287,12 @@ function VendorProductsTab({
                         flexShrink: 0,
                       }}
                     >
-                      {prod.status}
+                      {plan.status}
                     </span>
                     <button
                       type="button"
                       disabled={isLinked}
-                      onClick={() => handleLink(prod.id)}
+                      onClick={() => handleLink(plan.id)}
                       style={{
                         height: '24px',
                         padding: '0 10px',
@@ -2344,7 +2343,7 @@ function VendorProductsTab({
       )}
 
       {/* ─── Empty State ─────────────────────────────────────────── */}
-      {linkedProducts.length === 0 && !showPicker && (
+      {linkedPlans.length === 0 && !showPicker && (
         <div
           style={{
             padding: '48px 24px',
@@ -2364,7 +2363,7 @@ function VendorProductsTab({
               color: 'var(--foreground)',
             }}
           >
-            No benefits or services linked
+            No plans linked
           </div>
           <div
             style={{
@@ -2373,7 +2372,7 @@ function VendorProductsTab({
               color: 'var(--muted-foreground)',
             }}
           >
-            Associate this vendor with one or more benefits or services from the register.
+            Associate this vendor with one or more plans from the Products Register.
           </div>
           <button
             onClick={() => setShowPicker(true)}
@@ -2396,13 +2395,13 @@ function VendorProductsTab({
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
           >
-            <Plus size={14} /> Add Benefit or Service
+            <Plus size={14} /> Add Plan
           </button>
         </div>
       )}
 
-      {/* ─── Linked Service List ─────────────────────────────────── */}
-      {linkedProducts.length > 0 && (
+      {/* ─── Linked Plan List ────────────────────────────────────── */}
+      {linkedPlans.length > 0 && (
         <div
           style={{
             display: 'flex',
@@ -2410,22 +2409,22 @@ function VendorProductsTab({
             padding: '0 16px 16px',
           }}
         >
-          {linkedProducts.map((prod, idx) => {
-            const ss = PRODUCT_STATUS_STYLE[prod.status] ?? PRODUCT_STATUS_STYLE.Retired;
+          {linkedPlans.map((plan, idx) => {
+            const ss = PLAN_STATUS_STYLE[plan.status] ?? PLAN_STATUS_STYLE.Inactive;
             return (
               <div
-                key={prod.id}
+                key={plan.id}
                 style={{
                   background: 'var(--card)',
                   borderLeft: '1px solid var(--border)',
                   borderRight: '1px solid var(--border)',
                   borderTop: '1px solid var(--border)',
-                  borderBottom: idx === linkedProducts.length - 1 ? '1px solid var(--border)' : 'none',
-                  borderRadius: idx === 0 && linkedProducts.length === 1
+                  borderBottom: idx === linkedPlans.length - 1 ? '1px solid var(--border)' : 'none',
+                  borderRadius: idx === 0 && linkedPlans.length === 1
                     ? 'var(--radius-card)'
                     : idx === 0
                     ? 'var(--radius-card) var(--radius-card) 0 0'
-                    : idx === linkedProducts.length - 1
+                    : idx === linkedPlans.length - 1
                     ? '0 0 var(--radius-card) var(--radius-card)'
                     : '0',
                   padding: '10px 16px',
@@ -2445,7 +2444,7 @@ function VendorProductsTab({
                 {/* Name */}
                 <button
                   type="button"
-                  onClick={() => navigate(`/products/${prod.id}`)}
+                  onClick={() => navigate(`/plans/${plan.id}`)}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -2463,7 +2462,7 @@ function VendorProductsTab({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {prod.name}
+                  {plan.name}
                 </button>
 
                 {/* Status badge */}
@@ -2482,7 +2481,7 @@ function VendorProductsTab({
                     flexShrink: 0,
                   }}
                 >
-                  {prod.status}
+                  {plan.status}
                 </span>
 
                 {/* Metadata */}
@@ -2499,13 +2498,13 @@ function VendorProductsTab({
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {prod.type} &middot; {prod.category}
+                  {plan.id}
                 </span>
 
                 {/* Unlink action */}
                 <button
                   type="button"
-                  onClick={() => setRemovingProductId(prod.id)}
+                  onClick={() => setRemovingPlanId(plan.id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -2540,7 +2539,7 @@ function VendorProductsTab({
       )}
 
       {/* ─── Unlink Confirm Dialog ──────────────────────────────── */}
-      {removingProductId && productToRemove && (
+      {removingPlanId && planToRemove && (
         <div
           style={{
             position: 'fixed',
@@ -2552,7 +2551,7 @@ function VendorProductsTab({
             zIndex: 1000,
             padding: '16px',
           }}
-          onClick={() => setRemovingProductId(null)}
+          onClick={() => setRemovingPlanId(null)}
         >
           <div
             style={{
@@ -2576,7 +2575,7 @@ function VendorProductsTab({
                 color: 'var(--foreground)',
               }}
             >
-              Remove Benefit or Service Association
+              Remove Plan Association
             </div>
             <p
               style={{
@@ -2588,7 +2587,7 @@ function VendorProductsTab({
               }}
             >
               Are you sure you want to unlink{' '}
-              <strong>{productToRemove.name}</strong> from this vendor?
+              <strong>{planToRemove.name}</strong> from this vendor?
             </p>
             <div
               style={{
@@ -2603,7 +2602,7 @@ function VendorProductsTab({
                 lineHeight: '18px',
               }}
             >
-              This will remove the association only. The benefit or service itself will not be deleted.
+              This will remove the association only. The plan itself will not be deleted.
             </div>
             <div
               style={{
@@ -2614,7 +2613,7 @@ function VendorProductsTab({
               }}
             >
               <button
-                onClick={() => setRemovingProductId(null)}
+                onClick={() => setRemovingPlanId(null)}
                 style={{
                   height: '36px',
                   padding: '0 16px',
@@ -2631,7 +2630,7 @@ function VendorProductsTab({
                 Cancel
               </button>
               <button
-                onClick={() => handleUnlink(removingProductId)}
+                onClick={() => handleUnlink(removingPlanId)}
                 style={{
                   height: '36px',
                   padding: '0 16px',

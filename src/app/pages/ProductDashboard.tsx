@@ -11,8 +11,7 @@ import { ProductFormModal } from '../components/products/ProductFormModal';
 import type { Product, ProductType, ProductStatus } from '../data/productData';
 import { loadProducts, saveProducts } from '../data/productData';
 import { formatDate } from '../data/mockData';
-import { useApp } from '../context/AppContext';
-import { syncProductVendorLinks, removeProductFromAllVendors } from '../data/syncUtils';
+import { loadPlans } from '../data/planData';
 
 // ─── Status badge ────────────────────────────────────────────────────────────
 
@@ -91,11 +90,17 @@ export function ProductDashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [planCountByProduct, setPlanCountByProduct] = useState<Record<string, number>>({});
   const navigate = useNavigate();
-  const { vendors, updateVendor } = useApp();
 
   useEffect(() => {
     setProducts(loadProducts());
+    const plans = loadPlans();
+    const counts: Record<string, number> = {};
+    for (const plan of plans) {
+      counts[plan.productId] = (counts[plan.productId] ?? 0) + 1;
+    }
+    setPlanCountByProduct(counts);
   }, []);
 
   const persist = useCallback((updated: Product[]) => {
@@ -105,22 +110,14 @@ export function ProductDashboard() {
 
   function handleSave(product: Product) {
     const existing = products.find(p => p.id === product.id);
-    const oldVendorIds = existing?.vendorIds ?? [];
-    const newVendorIds = product.vendorIds ?? [];
-
     if (existing) {
       persist(products.map(p => (p.id === product.id ? product : p)));
     } else {
       persist([product, ...products]);
     }
-
-    // Bidirectional sync: update vendor productIds in AppContext
-    syncProductVendorLinks(product.id, newVendorIds, oldVendorIds, vendors, updateVendor);
   }
 
   function handleDelete(id: string) {
-    // Sync: remove this product from all vendors' productIds before deleting
-    removeProductFromAllVendors(id, vendors, updateVendor);
     persist(products.filter(p => p.id !== id));
     setDeleteConfirmId(null);
   }
@@ -140,7 +137,7 @@ export function ProductDashboard() {
   const totalBenefits = products.filter(p => p.type === 'Benefit').length;
   const totalServices = products.filter(p => p.type === 'Service').length;
   const activeProducts = products.filter(p => p.status === 'Active').length;
-  const withAssociations = products.filter(p => p.processAssociations.length > 0).length;
+  const withPlans = products.filter(p => (planCountByProduct[p.id] ?? 0) > 0).length;
 
   // ─── Filtering ────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -170,7 +167,7 @@ export function ProductDashboard() {
   const columns: GridColumn<Record<string, unknown>>[] = [
     {
       key: 'name',
-      header: 'Benefits or Services Name',
+      header: 'Product Name',
       sortable: true,
       width: '240px',
       render: (_val, row) => {
@@ -284,13 +281,13 @@ export function ProductDashboard() {
       },
     },
     {
-      key: 'processAssociations',
-      header: 'Processes',
+      key: '_plans',
+      header: 'Plans',
       sortable: false,
       width: '80px',
       render: (_val, row) => {
         const prod = row as unknown as Product;
-        const count = prod.processAssociations.length;
+        const count = planCountByProduct[prod.id] ?? 0;
         return (
           <span
             style={{
@@ -376,7 +373,7 @@ export function ProductDashboard() {
               lineHeight: '30px',
             }}
           >
-            Benefits or Services Register
+            Products Register
           </h1>
           <p
             style={{
@@ -387,7 +384,7 @@ export function ProductDashboard() {
               margin: '2px 0 0 0',
             }}
           >
-            Track benefits and service offerings across the enterprise.
+            Browse and manage program groupings. Each product contains one or more plans.
           </p>
         </div>
         <button
@@ -412,7 +409,7 @@ export function ProductDashboard() {
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
         >
           <Plus size={14} />
-          New Benefit or Service
+          New Product
         </button>
       </div>
 
@@ -424,11 +421,11 @@ export function ProductDashboard() {
           gap: '16px',
         }}
       >
-        <KPITile label="Total Benefits or Services" value={totalProducts} icon={Package} accent />
+        <KPITile label="Total Products" value={totalProducts} icon={Package} accent />
         <KPITile label="Benefits" value={totalBenefits} icon={Heart} iconColor="#1C8A45" />
         <KPITile label="Services" value={totalServices} icon={Briefcase} iconColor="#00A3A3" />
         <KPITile label="Active" value={activeProducts} icon={CheckCircle} iconColor="#1C8A45" />
-        <KPITile label="With Processes" value={withAssociations} icon={FileText} iconColor="#E07B00" subLabel={`of ${totalProducts}`} />
+        <KPITile label="With Plans" value={withPlans} icon={FileText} iconColor="#E07B00" subLabel={`of ${totalProducts}`} />
       </div>
 
       {/* ─── Search / Filters ────────────────────────────────────────── */}
@@ -458,7 +455,7 @@ export function ProductDashboard() {
           <input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search benefits or services..."
+            placeholder="Search products..."
             style={{
               border: 'none',
               outline: 'none',
@@ -549,15 +546,15 @@ export function ProductDashboard() {
         {filtered.length === 0 && products.length > 0 ? (
           <EmptyState
             icon={Search}
-            title="No matching benefits or services"
+            title="No matching products"
             description="Try adjusting your search or filter criteria."
           />
         ) : filtered.length === 0 ? (
           <EmptyState
             icon={Package}
-            title="No benefits or services yet"
-            description="Create your first benefit or service to start building the register."
-            action={{ label: 'New Benefit or Service', onClick: openNew }}
+            title="No products yet"
+            description="Create your first product to start building the register."
+            action={{ label: 'New Product', onClick: openNew }}
           />
         ) : (
           <RecordGrid
@@ -640,7 +637,7 @@ function DeleteConfirmDialog({
             margin: 0,
           }}
         >
-          Delete Benefit or Service
+          Delete Product
         </h3>
         <p
           style={{
@@ -653,7 +650,7 @@ function DeleteConfirmDialog({
           }}
         >
           Are you sure you want to delete &quot;<strong style={{ color: 'var(--foreground)' }}>{productName}</strong>&quot;?
-          This will also remove all process associations. This action cannot be undone.
+          Plans within this product will not be deleted. This action cannot be undone.
         </p>
         <div
           style={{

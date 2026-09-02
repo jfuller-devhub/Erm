@@ -6,8 +6,8 @@ import {
   generateId,
 } from '../data/mockData';
 import {
-  syncVendorProductLinks,
-  removeVendorFromAllProducts,
+  syncVendorPlanLinks,
+  removeVendorFromAllPlans,
 } from '../data/syncUtils';
 
 interface AppContextType {
@@ -76,17 +76,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newId = 'VEN-' + generateId();
     setVendors(prev => [...prev, { ...vendor, id: newId, createdDate: today, updatedDate: today }]);
     logActivity({ entityId: newId, entityType: 'vendor', user: 'You', userInitials: 'YO', action: `Added vendor ${vendor.name}`, timestamp: today });
-    // Sync: add this vendor to any selected products' vendorIds in localStorage
-    syncVendorProductLinks(newId, vendor.productIds ?? [], []);
+    // Sync: add this vendor to any selected plans' vendorIds in localStorage
+    syncVendorPlanLinks(newId, vendor.planIds ?? [], []);
   }, [today, logActivity]);
 
   const updateVendor = useCallback((id: string, changes: Partial<Vendor>) => {
     setVendors(prev => {
       const old = prev.find(v => v.id === id);
-      const oldProductIds = old?.productIds ?? [];
-      const newProductIds = changes.productIds ?? oldProductIds;
-      // Sync product vendorIds in localStorage
-      syncVendorProductLinks(id, newProductIds, oldProductIds);
+      const oldPlanIds = old?.planIds ?? [];
+      const newPlanIds = changes.planIds ?? oldPlanIds;
+      // Sync plan vendorIds in localStorage
+      syncVendorPlanLinks(id, newPlanIds, oldPlanIds);
       return prev.map(v => v.id === id ? { ...v, ...changes, updatedDate: today } : v);
     });
     logActivity({ entityId: id, entityType: 'vendor', user: 'You', userInitials: 'YO', action: `Updated vendor record ${id}`, timestamp: today });
@@ -96,8 +96,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setVendors(prev => prev.filter(v => v.id !== id));
     setContracts(prev => prev.filter(c => c.vendorId !== id));
     setVendorContacts(prev => prev.filter(c => c.vendorId !== id));
-    // Sync: remove this vendor from all products' vendorIds in localStorage
-    removeVendorFromAllProducts(id);
+    // Sync: remove this vendor from all plans' vendorIds in localStorage
+    removeVendorFromAllPlans(id);
   }, []);
 
   // ── Contracts ──────────────────────────────────────────────────────────────

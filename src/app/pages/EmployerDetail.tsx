@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Edit2, Trash2, Briefcase, Link2, Plus, X,
-  CheckCircle, XCircle, Calendar, User, Edit3,
+  CheckCircle, XCircle, Calendar, User, Edit3, Package, Heart, Search,
 } from 'lucide-react';
 import { EmployerFormModal } from '../components/employers/EmployerFormModal';
 import { EmployerRelationshipModal } from '../components/employers/EmployerRelationshipModal';
@@ -14,11 +14,13 @@ import {
   getRelationshipsForEmployer,
   RELATIONSHIP_TYPE_LABELS, RELATIONSHIP_TYPE_STYLES,
 } from '../data/employerData';
+import type { Product } from '../data/productData';
+import { loadProducts } from '../data/productData';
 import { formatDate, generateId } from '../data/mockData';
 
 // ─── Tab type ─────────────────────────────────────────────────────────────────
 
-type TabKey = 'details' | 'relationships';
+type TabKey = 'details' | 'relationships' | 'products';
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -144,16 +146,21 @@ export function EmployerDetail() {
 
   const [employers,       setEmployers]       = useState<Employer[]>([]);
   const [relationships,   setRelationships]   = useState<EmployerRelationship[]>([]);
+  const [allProducts,     setAllProducts]     = useState<Product[]>([]);
   const [activeTab,       setActiveTab]       = useState<TabKey>('details');
   const [editModalOpen,   setEditModalOpen]   = useState(false);
   const [deleteConfirm,   setDeleteConfirm]   = useState(false);
   const [relModalOpen,    setRelModalOpen]    = useState(false);
   const [editingRel,      setEditingRel]      = useState<EmployerRelationship | null>(null);
   const [deletingRelId,   setDeletingRelId]   = useState<string | null>(null);
+  const [productSearch,   setProductSearch]   = useState('');
+  const [showProductLink, setShowProductLink] = useState(false);
+  const [linkSearch,      setLinkSearch]      = useState('');
 
   useEffect(() => {
     setEmployers(loadEmployers());
     setRelationships(loadEmployerRelationships());
+    setAllProducts(loadProducts());
   }, [id]);
 
   const persistEmployers = useCallback((updated: Employer[]) => {
@@ -252,10 +259,38 @@ export function EmployerDetail() {
     setDeletingRelId(null);
   }
 
+  // ─── Product link/unlink handlers ───────────────────────────────────────
+
+  function handleLinkProduct(productId: string) {
+    const now = new Date().toISOString().split('T')[0];
+    const updated = employers.map(e =>
+      e.id === employer.id && !e.productIds.includes(productId)
+        ? { ...e, productIds: [...e.productIds, productId], modifiedAt: now, modifiedBy: 'Admin' }
+        : e,
+    );
+    persistEmployers(updated);
+    setLinkSearch('');
+    setShowProductLink(false);
+  }
+
+  function handleUnlinkProduct(productId: string) {
+    const now = new Date().toISOString().split('T')[0];
+    const updated = employers.map(e =>
+      e.id === employer.id
+        ? { ...e, productIds: e.productIds.filter(pid => pid !== productId), modifiedAt: now, modifiedBy: 'Admin' }
+        : e,
+    );
+    persistEmployers(updated);
+  }
+
   // ─── Tab bar ────────────────────────────────────────────────────────────
+
+  const linkedProductIds = employer.productIds ?? [];
+  const linkedProducts = allProducts.filter(p => linkedProductIds.includes(p.id));
 
   const TABS: { key: TabKey; label: string; count?: number }[] = [
     { key: 'details',       label: 'Details' },
+    { key: 'products',      label: 'Products', count: linkedProducts.length },
     { key: 'relationships', label: 'Relationships', count: myRelationships.length },
   ];
 
@@ -513,6 +548,159 @@ export function EmployerDetail() {
               </div>
             </div>
           )}
+
+          {/* ── PRODUCTS TAB ─────────────────────────────────────────────── */}
+          {activeTab === 'products' && (() => {
+            const filteredLinked = linkedProducts.filter(p =>
+              !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()),
+            );
+            const unlinkableIds = new Set(linkedProductIds);
+            const linkableProducts = allProducts.filter(
+              p => !unlinkableIds.has(p.id) &&
+                (!linkSearch || p.name.toLowerCase().includes(linkSearch.toLowerCase())),
+            );
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', lineHeight: '20px' }}>
+                      Offered Products
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', lineHeight: '18px' }}>
+                      Benefits and services available to {employer.name} employees.
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowProductLink(p => !p); setLinkSearch(''); }}
+                    style={{ ...btnBase, background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                  >
+                    <Plus size={14} /> Link Product
+                  </button>
+                </div>
+
+                {/* Inline link picker */}
+                {showProductLink && (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', background: 'var(--card)', overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--muted)' }}>
+                      <Search size={13} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
+                      <input
+                        autoFocus
+                        value={linkSearch}
+                        onChange={e => setLinkSearch(e.target.value)}
+                        placeholder="Search products to link..."
+                        style={{
+                          flex: 1, border: 'none', background: 'transparent', outline: 'none',
+                          fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
+                          color: 'var(--foreground)',
+                        }}
+                      />
+                      <button
+                        onClick={() => setShowProductLink(false)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', border: 'none', borderRadius: '4px', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)' }}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {linkableProducts.length === 0 ? (
+                      <div style={{ padding: '20px', textAlign: 'center', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>
+                        {linkSearch ? 'No matching products.' : 'All products are already linked.'}
+                      </div>
+                    ) : (
+                      <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                        {linkableProducts.map(p => (
+                          <div
+                            key={p.id}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                            onClick={() => handleLinkProduct(p.id)}
+                          >
+                            <div>
+                              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>{p.name}</div>
+                              <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>{p.category} · {p.type}</div>
+                            </div>
+                            <Plus size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Search linked */}
+                {linkedProducts.length > 4 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-input)', padding: '6px 10px', background: 'var(--card)' }}>
+                    <Search size={13} style={{ color: 'var(--muted-foreground)' }} />
+                    <input
+                      value={productSearch}
+                      onChange={e => setProductSearch(e.target.value)}
+                      placeholder="Filter linked products..."
+                      style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--foreground)' }}
+                    />
+                  </div>
+                )}
+
+                {/* Linked product list */}
+                {linkedProducts.length === 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', gap: '12px', background: 'var(--muted)', borderRadius: 'var(--radius-card)' }}>
+                    <Package size={32} style={{ color: 'var(--muted-foreground)' }} />
+                    <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>No products linked</span>
+                    <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)', textAlign: 'center', maxWidth: '320px' }}>
+                      Click "Link Product" to associate benefits and services with this employer.
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'hidden' }}>
+                    {/* Column headers */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 100px 40px', gap: '8px', padding: '8px 14px', background: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+                      {['Product', 'Category', 'Type', ''].map(h => (
+                        <span key={h} style={{ fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
+                      ))}
+                    </div>
+                    {filteredLinked.map((p, idx) => (
+                      <div
+                        key={p.id}
+                        style={{ display: 'grid', gridTemplateColumns: '1fr 120px 100px 40px', gap: '8px', padding: '10px 14px', alignItems: 'center', borderBottom: idx < filteredLinked.length - 1 ? '1px solid var(--border)' : 'none', background: 'transparent' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <span
+                          style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          onClick={() => navigate(`/products/${p.id}`)}
+                        >
+                          {p.name}
+                        </span>
+                        <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.category}</span>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                          height: '20px', padding: '0 8px', borderRadius: '100px',
+                          background: p.type === 'Benefit' ? '#E8F5EE' : '#E0F5F5',
+                          color: p.type === 'Benefit' ? '#1C8A45' : '#00A3A3',
+                          fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap',
+                        }}>
+                          {p.type === 'Benefit' ? <Heart size={9} /> : <Package size={9} />}
+                          {p.type}
+                        </span>
+                        <button
+                          title="Remove product link"
+                          onClick={() => handleUnlinkProduct(p.id)}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', border: 'none', borderRadius: 'var(--radius-input)', background: 'transparent', color: 'var(--destructive)', cursor: 'pointer' }}
+                          onMouseEnter={ev => (ev.currentTarget.style.background = 'rgba(192,57,43,0.08)')}
+                          onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── RELATIONSHIPS TAB ────────────────────────────────────────── */}
           {activeTab === 'relationships' && (
