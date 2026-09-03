@@ -18,6 +18,7 @@ export interface Persona {
   description: string;
   entityIds: string[];
   productIds: string[];
+  planIds: string[];
   attributes: PersonaAttribute[];
   tags: string[];
   createdDate: string;
@@ -40,7 +41,7 @@ export type PersonaCategory = (typeof PERSONA_CATEGORIES)[number];
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'erm_personas_v1';
+const STORAGE_KEY = 'erm_personas_v2';
 
 function sanitizeAttribute(a: any): PersonaAttribute {
   return {
@@ -59,6 +60,7 @@ function sanitizePersona(p: any): Persona {
     description: p.description ?? '',
     entityIds:   Array.isArray(p.entityIds)   ? p.entityIds   : [],
     productIds:  Array.isArray(p.productIds)  ? p.productIds  : [],
+    planIds:     Array.isArray(p.planIds)     ? p.planIds     : [],
     attributes:  Array.isArray(p.attributes)  ? p.attributes.map(sanitizeAttribute) : [],
     tags:        Array.isArray(p.tags)        ? p.tags        : [],
     createdDate: p.createdDate ?? '',
@@ -104,6 +106,7 @@ export const SEED_PERSONAS: Persona[] = [
     description: 'Full-time or part-time employee currently enrolled in benefits and actively working for an eligible employer. The primary persona the benefit program is designed around.',
     entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     productIds: ['PRD-001', 'PRD-002', 'PRD-004', 'PRD-005', 'PRD-006', 'PRD-007'],
+    planIds: ['PLN-001', 'PLN-003', 'PLN-004', 'PLN-006', 'PLN-007', 'PLN-008', 'PLN-009', 'PLN-010', 'PLN-011'],
     tags: ['Core', 'Active', 'Enrollment'],
     attributes: [
       { id: 'A001', label: 'Age Range',           value: '22–64' },
@@ -124,6 +127,7 @@ export const SEED_PERSONAS: Persona[] = [
     description: 'Former employee who has retired and is eligible for retiree medical coverage and/or receiving pension or retirement income. Coverage needs shift significantly post-retirement.',
     entityIds: ['EMP-001', 'EMP-002', 'EMP-003'],
     productIds: ['PRD-001', 'PRD-003'],
+    planIds: ['PLN-002', 'PLN-005'],
     tags: ['Retiree', 'Medicare', 'Pension'],
     attributes: [
       { id: 'A007', label: 'Age Range',             value: '55–85+' },
@@ -144,6 +148,7 @@ export const SEED_PERSONAS: Persona[] = [
     description: 'Employee who has left employment and may have continuation coverage rights (COBRA) or vested retirement benefits. Requires clear offboarding and transition communications.',
     entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     productIds: ['PRD-001', 'PRD-008'],
+    planIds: ['PLN-001', 'PLN-011'],
     tags: ['COBRA', 'Terminated', 'Transition'],
     attributes: [
       { id: 'A013', label: 'COBRA Eligibility',   value: 'Up to 18 months continuation coverage after qualifying event' },
@@ -164,6 +169,7 @@ export const SEED_PERSONAS: Persona[] = [
     description: 'Young adults ages 18–25 serving a full-time mission, typically 18–24 months. May be covered under parent\'s plan or a dedicated mission health plan. Primarily in-the-field with limited administrative access.',
     entityIds: ['EMP-001', 'EMP-003'],
     productIds: ['PRD-002'],
+    planIds: ['PLN-003', 'PLN-004'],
     tags: ['Missionary', 'International', 'Youth'],
     attributes: [
       { id: 'A019', label: 'Age Range',         value: '18–25' },
@@ -185,6 +191,7 @@ export const SEED_PERSONAS: Persona[] = [
     description: 'Retired or near-retirement couples serving a full-time mission, typically 6–23 months. Greater healthcare complexity due to age-related conditions; may be Medicare-eligible.',
     entityIds: ['EMP-001', 'EMP-003'],
     productIds: ['PRD-002', 'PRD-003'],
+    planIds: ['PLN-003', 'PLN-005'],
     tags: ['Missionary', 'Senior', 'Medicare', 'International'],
     attributes: [
       { id: 'A026', label: 'Age Range',              value: '50–75' },

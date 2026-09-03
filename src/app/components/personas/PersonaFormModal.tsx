@@ -64,6 +64,7 @@ export function PersonaFormModal({ isOpen, onClose, onSave, editingPersona }: Pe
       description: description.trim(),
       entityIds:  editingPersona?.entityIds  ?? [],
       productIds: editingPersona?.productIds ?? [],
+      planIds:    editingPersona?.planIds    ?? [],
       attributes: editingPersona?.attributes ?? [],
       tags: parsedTags,
     };

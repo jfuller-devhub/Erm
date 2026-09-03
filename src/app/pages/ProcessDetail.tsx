@@ -13,6 +13,8 @@ import type { Process, ProcessStatus, SubProcess, Step, StepType } from '../data
 import { loadProcesses, saveProcesses } from '../data/processData';
 import type { Plan } from '../data/planData';
 import { loadPlans } from '../data/planData';
+import type { Product } from '../data/productData';
+import { loadProducts } from '../data/productData';
 import { formatDate, generateId } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 
@@ -81,7 +83,7 @@ function StepTypeBadge({ type }: { type: string }) {
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Sub-Processes', 'Risks', 'Controls', 'Dependencies', 'Plans', 'Vendors'] as const;
+const TABS = ['Overview', 'Sub-Processes', 'Risks', 'Controls', 'Dependencies', 'Products & Plans', 'Vendors'] as const;
 type TabKey = typeof TABS[number];
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
@@ -92,6 +94,7 @@ export function ProcessDetail() {
   const { vendors, updateVendor } = useApp();
 
   const [processes, setProcesses] = useState<Process[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>('Overview');
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -100,6 +103,7 @@ export function ProcessDetail() {
 
   useEffect(() => {
     setProcesses(loadProcesses());
+    setAllProducts(loadProducts());
     if (id) {
       setRiskLinkCount(loadProcessRiskLinks().filter(l => l.processId === id).length);
       setControlLinkCount(loadProcessControlLinks().filter(l => l.processId === id).length);
@@ -114,6 +118,12 @@ export function ProcessDetail() {
   }, []);
 
   function handleSave(updated: Process) {
+    persist(processes.map(p => (p.id === updated.id ? updated : p)));
+  }
+
+  function patchProcess(changes: Partial<Process>) {
+    if (!process) return;
+    const updated = { ...process, ...changes };
     persist(processes.map(p => (p.id === updated.id ? updated : p)));
   }
 
@@ -457,10 +467,10 @@ export function ProcessDetail() {
                 {deps.length}
               </span>
             )}
-            {tab === 'Plans' && (() => {
-              const count = loadPlans().filter(p =>
-                (p.processAssociations ?? []).some((a: { processId: string }) => a.processId === process.id)
-              ).length;
+            {tab === 'Products & Plans' && (() => {
+              const pIds = process.productIds ?? [];
+              const plIds = process.planIds ?? [];
+              const count = pIds.length + plIds.length;
               return count > 0 ? (
                 <span
                   style={{
@@ -532,8 +542,15 @@ export function ProcessDetail() {
         <DependenciesTab deps={deps} navigate={navigate} />
       )}
 
-      {activeTab === 'Plans' && (
-        <PlansTab process={process} />
+      {activeTab === 'Products & Plans' && (
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-sm)', overflow: 'hidden' }}>
+          <ProcessProductsPlansTab
+            process={process}
+            allProducts={allProducts}
+            onPatch={patchProcess}
+            navigate={navigate}
+          />
+        </div>
       )}
 
       {activeTab === 'Vendors' && (
@@ -1761,129 +1778,244 @@ function DependenciesTab({ deps, navigate }: { deps: Process[]; navigate: (path:
 
 // ─── Plans Tab ───────────────────────────────────────────────────────────────
 
-function PlansTab({ process }: { process: Process }) {
-  const navigate = useNavigate();
-  const allPlans = loadPlans();
-  const plans = allPlans.filter(p =>
-    (p.processAssociations ?? []).some((a: { processId: string }) => a.processId === process.id)
-  );
+// ─── Process Products & Plans Tab ────────────────────────────────────────────
 
-  if (plans.length === 0) {
-    return (
-      <div
-        style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-card)',
-          padding: '48px 24px',
-          textAlign: 'center',
-        }}
-      >
-        <Package size={48} style={{ color: 'var(--muted-foreground)', marginBottom: '12px' }} />
-        <h3
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: '14px',
-            fontWeight: 'var(--font-weight-semibold)',
-            color: 'var(--foreground)',
-            margin: '0 0 4px 0',
-          }}
-        >
-          No plans associated
-        </h3>
-        <p
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: 'var(--text-base)',
-            fontWeight: 'var(--font-weight-regular)',
-            color: 'var(--muted-foreground)',
-            margin: 0,
-          }}
-        >
-          Plans can be linked to this process via the Process Associations section in each plan.
-        </p>
-      </div>
-    );
+type ProcProductAssoc =
+  | { kind: 'product'; product: Product }
+  | { kind: 'plan';    plan: Plan; product: Product | null };
+
+function prodStatusStyle(status: string) {
+  if (status === 'Active')  return { bg: '#E8F5EE', color: '#1C8A45' };
+  if (status === 'Draft')   return { bg: '#FFF3E0', color: '#E07B00' };
+  if (status === 'Retired') return { bg: '#F0F0F0', color: '#6B7489' };
+  if (status === 'Sunset')  return { bg: '#F3E8FC', color: '#7B2DBF' };
+  return { bg: '#F0F0F0', color: '#6B7489' };
+}
+
+function ProcessProductsPlansTab({
+  process, allProducts, onPatch, navigate,
+}: {
+  process: Process;
+  allProducts: Product[];
+  onPatch: (changes: Partial<Process>) => void;
+  navigate: (path: string) => void;
+}) {
+  const [showAddPicker, setShowAddPicker]  = useState(false);
+  const [expandedProdId, setExpandedProdId] = useState<string | null>(null);
+  const [deletingAssoc, setDeletingAssoc]  = useState<ProcProductAssoc | null>(null);
+
+  const allPlans = loadPlans();
+
+  const productIds = process.productIds ?? [];
+  const planIds    = process.planIds    ?? [];
+
+  const resolved: ProcProductAssoc[] = [
+    ...allProducts
+      .filter(p => productIds.includes(p.id))
+      .map(p => ({ kind: 'product' as const, product: p })),
+    ...planIds
+      .map(planId => {
+        const plan    = allPlans.find(pl => pl.id === planId) ?? null;
+        const product = plan ? (allProducts.find(p => p.id === plan.productId) ?? null) : null;
+        if (!plan) return null;
+        return { kind: 'plan' as const, plan, product };
+      })
+      .filter((r): r is { kind: 'plan'; plan: Plan; product: Product | null } => r !== null),
+  ];
+
+  function handleLinkProduct(productId: string) {
+    if (productIds.includes(productId)) return;
+    onPatch({ productIds: [...productIds, productId] });
+  }
+
+  function handleLinkPlan(planId: string) {
+    if (planIds.includes(planId)) return;
+    onPatch({ planIds: [...planIds, planId] });
+  }
+
+  function handleRemove(assoc: ProcProductAssoc) {
+    if (assoc.kind === 'product') {
+      const prodPlans = allPlans.filter(pl => pl.productId === assoc.product.id).map(pl => pl.id);
+      onPatch({
+        productIds: productIds.filter(id => id !== assoc.product.id),
+        planIds:    planIds.filter(id => !prodPlans.includes(id)),
+      });
+    } else {
+      onPatch({ planIds: planIds.filter(id => id !== assoc.plan.id) });
+    }
+    setDeletingAssoc(null);
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Package size={16} style={{ color: 'var(--primary)' }} />
-        <span
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: 'var(--text-base)',
-            fontWeight: 'var(--font-weight-semibold)',
-            color: 'var(--foreground)',
-          }}
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+
+      {/* Toolbar */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Package size={16} style={{ color: 'var(--primary)' }} />
+          <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>
+            Linked Products &amp; Plans
+          </span>
+          <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', background: 'var(--muted)', border: '1px solid var(--border)', borderRadius: '100px', padding: '1px 8px', lineHeight: '18px' }}>
+            {resolved.length}
+          </span>
+        </div>
+        <button
+          onClick={() => setShowAddPicker(o => !o)}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
         >
-          Associated Plans
-        </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-family-primary)',
-            fontSize: '12px',
-            fontWeight: 'var(--font-weight-semibold)',
-            color: 'var(--muted-foreground)',
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: '100px',
-            padding: '1px 8px',
-            lineHeight: '18px',
-          }}
-        >
-          {plans.length}
-        </span>
+          <Plus size={14} /> Add Product / Plan
+        </button>
       </div>
 
-      {plans.map(plan => (
-        <div
-          key={plan.id}
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-card)',
-            padding: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '16px',
-            cursor: 'pointer',
-            transition: 'box-shadow 0.1s',
-          }}
-          onClick={() => navigate(`/plans/${plan.id}`)}
-          onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--elevation-sm)'; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <Package size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-            <span
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: 'var(--text-base)',
-                fontWeight: 'var(--font-weight-semibold)',
-                color: 'var(--primary)',
-              }}
-            >
-              {plan.name}
-            </span>
+      {/* Picker panel */}
+      {showAddPicker && (
+        <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+            Select a Product or Plan to Associate
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
-            <span
-              style={{
-                fontFamily: 'var(--font-family-primary)',
-                fontSize: '12px',
-                fontWeight: 'var(--font-weight-regular)',
-                color: 'var(--muted-foreground)',
-              }}
-            >
-              {plan.status}
-            </span>
-            <ArrowRight size={14} style={{ color: 'var(--muted-foreground)' }} />
+          <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', background: 'var(--card)', maxHeight: '280px', overflowY: 'auto' }}>
+            {allProducts.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>No products available.</div>
+            ) : allProducts.map(prod => {
+              const prodPlans  = allPlans.filter(pl => pl.productId === prod.id);
+              const hasSubs    = prodPlans.length > 0;
+              const isExp      = expandedProdId === prod.id;
+              const prodLinked = productIds.includes(prod.id);
+              const ps         = prodStatusStyle(prod.status);
+
+              return (
+                <div key={prod.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px' }}>
+                    {hasSubs ? (
+                      <button type="button" onClick={() => setExpandedProdId(isExp ? null : prod.id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--muted-foreground)', flexShrink: 0 }}>
+                        {isExp ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </button>
+                    ) : <span style={{ width: '14px', flexShrink: 0 }} />}
+                    <Package size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>{prod.name}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', height: '18px', padding: '0 6px', borderRadius: '100px', background: ps.bg, color: ps.color, fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', flexShrink: 0 }}>{prod.status}</span>
+                    <button type="button" disabled={prodLinked} onClick={() => handleLinkProduct(prod.id)}
+                      style={{ height: '24px', padding: '0 10px', border: `1px solid ${prodLinked ? 'var(--border)' : 'var(--primary)'}`, borderRadius: 'var(--radius-button)', background: prodLinked ? 'var(--muted)' : 'transparent', color: prodLinked ? 'var(--muted-foreground)' : 'var(--primary)', fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', cursor: prodLinked ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                      {prodLinked ? 'Linked' : <><Plus size={10} /> Add</>}
+                    </button>
+                  </div>
+                  {isExp && hasSubs && (
+                    <div style={{ paddingLeft: '36px', borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,0.02)' }}>
+                      {prodPlans.map(plan => {
+                        const planLinked = planIds.includes(plan.id);
+                        const pls = prodStatusStyle(plan.status);
+                        return (
+                          <div key={plan.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', borderBottom: '1px solid var(--border)' }}>
+                            <GitBranch size={12} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
+                            <span style={{ flex: 1, fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--foreground)' }}>{plan.name}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', height: '16px', padding: '0 5px', borderRadius: '100px', background: pls.bg, color: pls.color, fontFamily: 'var(--font-family-primary)', fontSize: '10px', fontWeight: 'var(--font-weight-semibold)', flexShrink: 0 }}>{plan.status}</span>
+                            <button type="button" disabled={planLinked} onClick={() => handleLinkPlan(plan.id)}
+                              style={{ height: '22px', padding: '0 8px', border: `1px solid ${planLinked ? 'var(--border)' : 'var(--primary)'}`, borderRadius: 'var(--radius-button)', background: planLinked ? 'var(--muted)' : 'transparent', color: planLinked ? 'var(--muted-foreground)' : 'var(--primary)', fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', cursor: planLinked ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                              {planLinked ? 'Linked' : <><Plus size={9} /> Add</>}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={() => { setShowAddPicker(false); setExpandedProdId(null); }}
+              style={{ height: '28px', padding: '0 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'var(--card)', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>
+              Done
+            </button>
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Association cards */}
+      {resolved.length === 0 && !showAddPicker ? (
+        <div style={{ padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+          <Package size={40} style={{ color: 'var(--muted-foreground)' }} />
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>No products or plans linked</div>
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>Associate this process with products or specific plans.</div>
+          <button onClick={() => setShowAddPicker(true)}
+            style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}>
+            <Plus size={14} /> Add Product / Plan
+          </button>
+        </div>
+      ) : resolved.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '0 16px 16px' }}>
+          {resolved.map((item, idx) => {
+            const isFirst = idx === 0;
+            const isLast  = idx === resolved.length - 1;
+            const radius  = isFirst && isLast ? 'var(--radius-card)' : isFirst ? 'var(--radius-card) var(--radius-card) 0 0' : isLast ? '0 0 var(--radius-card) var(--radius-card)' : '0';
+            const key     = item.kind === 'product' ? `prod-${item.product.id}` : `plan-${item.plan.id}`;
+            const ps      = item.kind === 'product' ? prodStatusStyle(item.product.status) : prodStatusStyle(item.plan.status);
+            const prodName = item.kind === 'product' ? item.product.name : (item.product?.name ?? '');
+
+            return (
+              <div key={key}
+                style={{ background: 'var(--card)', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderTop: '1px solid var(--border)', borderBottom: isLast ? '1px solid var(--border)' : 'none', borderRadius: radius, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', transition: 'background 0.1s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--muted)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--card)'; }}>
+                <Package size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                {item.kind === 'product' ? (
+                  <button type="button" onClick={() => navigate(`/products/${item.product.id}`)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.product.name}
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => navigate(`/products/${item.product?.id}`)}
+                      style={{ background: 'none', border: 'none', cursor: item.product ? 'pointer' : 'default', padding: 0, fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: item.product ? 'var(--primary)' : 'var(--foreground)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {prodName}
+                    </button>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                      <GitBranch size={11} style={{ color: 'var(--muted-foreground)' }} />
+                      <button type="button" onClick={() => navigate(`/plans/${item.plan.id}`)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.plan.name}
+                      </button>
+                    </span>
+                  </>
+                )}
+                <span style={{ display: 'inline-flex', alignItems: 'center', height: '20px', padding: '0 8px', borderRadius: '100px', background: ps.bg, color: ps.color, fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', flexShrink: 0 }}>{item.kind === 'product' ? item.product.status : item.plan.status}</span>
+                <span style={{ flex: 1 }} />
+                <button type="button" onClick={() => setDeletingAssoc(item)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '24px', padding: '0 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--muted-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', flexShrink: 0 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--destructive)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--destructive)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)'; }}>
+                  <X size={10} /> Unlink
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* Delete confirm */}
+      {deletingAssoc && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget) setDeletingAssoc(null); }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: '0px 8px 32px 0px rgba(0,0,0,0.18)', width: '100%', maxWidth: '420px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontFamily: 'var(--font-family-primary)', fontSize: '18px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)', margin: 0 }}>Remove Association</h3>
+            <p style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)', margin: 0, lineHeight: '22px' }}>
+              {deletingAssoc.kind === 'product'
+                ? <>Remove the link to <strong style={{ color: 'var(--foreground)' }}>{deletingAssoc.product.name}</strong>? Any plan links under this product will also be removed.</>
+                : <>Remove the plan link to <strong style={{ color: 'var(--foreground)' }}>{deletingAssoc.plan.name}</strong>?</>}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button onClick={() => setDeletingAssoc(null)} style={{ height: '36px', padding: '0 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => handleRemove(deletingAssoc)} style={{ height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--destructive)', color: 'var(--destructive-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>Remove</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

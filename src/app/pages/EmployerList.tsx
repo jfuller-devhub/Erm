@@ -205,7 +205,7 @@ export function EmployerList() {
                 fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)',
                 fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', cursor: 'pointer',
               }}
-              onClick={ev => { ev.stopPropagation(); navigate(`/employers/${e.id}`); }}
+              onClick={ev => { ev.stopPropagation(); navigate(`/entities/${e.id}`); }}
             >
               {e.name}
             </span>
@@ -465,7 +465,7 @@ export function EmployerList() {
             columns={columns}
             data={gridData}
             pageSize={10}
-            onRowClick={row => navigate(`/employers/${(row as unknown as Employer).id}`)}
+            onRowClick={row => navigate(`/entities/${(row as unknown as Employer).id}`)}
           />
         )}
       </div>

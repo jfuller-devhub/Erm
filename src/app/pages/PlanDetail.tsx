@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Edit2, Plus, CalendarDays, User, Tag,
   FileText, Shield, DollarSign, BarChart2, Smile, Target,
-  Building2, GitBranch,
+  Building2, GitBranch, Search, X,
 } from 'lucide-react';
 import type { Plan, PlanStatus } from '../data/planData';
 import { loadPlans, savePlans, updatePlan } from '../data/planData';
@@ -11,6 +11,10 @@ import type { Benefit, QnxtConfigStatus } from '../data/benefitData';
 import { loadBenefits } from '../data/benefitData';
 import type { Product } from '../data/productData';
 import { loadProducts } from '../data/productData';
+import type { Employer } from '../data/employerData';
+import { loadEmployers } from '../data/employerData';
+import type { Persona } from '../data/personaData';
+import { loadPersonas } from '../data/personaData';
 import { useApp } from '../context/AppContext';
 import { BenefitFormModal } from '../components/plans/BenefitFormModal';
 import { PlanFormModal } from '../components/plans/PlanFormModal';
@@ -188,8 +192,8 @@ function OutlineButton({ onClick, children }: { onClick: () => void; children: R
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
-type Tab = 'Overview' | 'Benefits' | 'Vendors' | 'Processes' | 'Roadmap';
-const TABS: Tab[] = ['Overview', 'Benefits', 'Vendors', 'Processes', 'Roadmap'];
+type Tab = 'Overview' | 'Benefits' | 'Entities' | 'Vendors' | 'Processes' | 'Roadmap' | 'Personas';
+const TABS: Tab[] = ['Overview', 'Benefits', 'Entities', 'Vendors', 'Processes', 'Roadmap', 'Personas'];
 
 function TabBar({ active, onChange, counts }: { active: Tab; onChange: (t: Tab) => void; counts?: Partial<Record<Tab, number>> }) {
   return (
@@ -242,10 +246,14 @@ export function PlanDetail() {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [benefits, setBenefits] = useState<Benefit[]>([]);
+  const [allEntities, setAllEntities] = useState<Employer[]>([]);
+  const [allPersonas, setAllPersonas] = useState<Persona[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [benefitModalOpen, setBenefitModalOpen] = useState(false);
   const [editingBenefit, setEditingBenefit] = useState<Benefit | null>(null);
+  const [showEntityPicker, setShowEntityPicker] = useState(false);
+  const [entityPickerSearch, setEntityPickerSearch] = useState('');
 
   const reload = useCallback(() => {
     const plans = loadPlans();
@@ -258,6 +266,8 @@ export function PlanDetail() {
       const allBenefits = loadBenefits();
       setBenefits(allBenefits.filter(b => b.planId === found.id));
     }
+    setAllEntities(loadEmployers());
+    setAllPersonas(loadPersonas());
   }, [id]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -271,12 +281,35 @@ export function PlanDetail() {
   }
 
   const linkedVendors = vendors.filter(v => plan.vendorIds.includes(v.id));
+  const linkedEntities = allEntities.filter(e => (plan.entityIds ?? []).includes(e.id));
+  const linkedPersonas = allPersonas.filter(per => (per.planIds ?? []).includes(plan.id));
 
   const tabCounts: Partial<Record<Tab, number>> = {
     Benefits: benefits.length,
+    Entities: linkedEntities.length,
     Vendors: linkedVendors.length,
     Processes: plan.processAssociations.length,
+    Personas: linkedPersonas.length,
   };
+
+  function handleLinkEntity(entityId: string) {
+    if (!plan || plan.entityIds.includes(entityId)) return;
+    const updated = { ...plan, entityIds: [...plan.entityIds, entityId] };
+    const allPlans = loadPlans();
+    const saved = allPlans.map(p => p.id === plan.id ? updated : p);
+    savePlans(saved);
+    setPlan(updated);
+    setEntityPickerSearch('');
+    setShowEntityPicker(false);
+  }
+
+  function handleUnlinkEntity(entityId: string) {
+    if (!plan) return;
+    const updated = { ...plan, entityIds: plan.entityIds.filter(eid => eid !== entityId) };
+    const allPlans = loadPlans();
+    savePlans(allPlans.map(p => p.id === plan.id ? updated : p));
+    setPlan(updated);
+  }
 
   function handlePlanSaved(saved: Plan) {
     setPlan(saved);
@@ -563,6 +596,119 @@ export function PlanDetail() {
           </div>
         )}
 
+        {/* ── Entities Tab ── */}
+        {activeTab === 'Entities' && (() => {
+          const linkedIds = new Set(linkedEntities.map(e => e.id));
+          const linkableEntities = allEntities.filter(
+            e => !linkedIds.has(e.id) &&
+              (!entityPickerSearch || e.name.toLowerCase().includes(entityPickerSearch.toLowerCase())),
+          );
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>Entities</div>
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                    Entities whose members are offered this plan.
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowEntityPicker(p => !p); setEntityPickerSearch(''); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '0.88')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                >
+                  <Plus size={14} /> Link Entity
+                </button>
+              </div>
+
+              {showEntityPicker && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'hidden' }}>
+                  <div style={{ padding: '8px 12px', background: 'var(--muted)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Search size={13} style={{ color: 'var(--muted-foreground)', flexShrink: 0 }} />
+                    <input
+                      autoFocus
+                      value={entityPickerSearch}
+                      onChange={e => setEntityPickerSearch(e.target.value)}
+                      placeholder="Search entities to link..."
+                      style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--foreground)' }}
+                    />
+                    <button onClick={() => setShowEntityPicker(false)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--muted-foreground)', borderRadius: '3px' }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                  {linkableEntities.length === 0 ? (
+                    <div style={{ padding: '16px', textAlign: 'center', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>
+                      {entityPickerSearch ? 'No matching entities.' : 'All entities are already linked.'}
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      {linkableEntities.map(e => (
+                        <div
+                          key={e.id}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+                          onMouseEnter={ev => (ev.currentTarget.style.background = 'var(--muted)')}
+                          onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                          onClick={() => handleLinkEntity(e.id)}
+                        >
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>{e.name}</div>
+                            <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>{e.code} · {e.isActive ? 'Active' : 'Inactive'}</div>
+                          </div>
+                          <Plus size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {linkedEntities.length === 0 ? (
+                <div style={{ padding: '40px 24px', textAlign: 'center', background: 'var(--muted)', borderRadius: 'var(--radius-card)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <Building2 size={32} style={{ color: 'var(--muted-foreground)' }} />
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>No entities linked</div>
+                  <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>Click "Link Entity" to associate entities with this plan.</div>
+                </div>
+              ) : (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'hidden' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 80px 40px', padding: '8px 14px', background: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+                    {['Entity', 'Code', 'Status', ''].map(h => (
+                      <span key={h} style={{ fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
+                    ))}
+                  </div>
+                  {linkedEntities.map((e, idx) => (
+                    <div
+                      key={e.id}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 90px 80px 40px', padding: '10px 14px', alignItems: 'center', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}
+                      onMouseEnter={ev => (ev.currentTarget.style.background = 'var(--muted)')}
+                      onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                    >
+                      <span
+                        style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        onClick={() => navigate(`/entities/${e.id}`)}
+                      >
+                        {e.name}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>{e.code}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', height: '18px', padding: '0 7px', borderRadius: '100px', background: e.isActive ? '#E8F5EE' : '#F0F0F0', color: e.isActive ? '#1C8A45' : '#6B7489', fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap' }}>
+                        {e.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                      <button
+                        onClick={() => handleUnlinkEntity(e.id)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', border: 'none', borderRadius: 'var(--radius-input)', background: 'transparent', color: 'var(--destructive)', cursor: 'pointer' }}
+                        onMouseEnter={ev => (ev.currentTarget.style.background = 'rgba(220,38,38,0.08)')}
+                        onMouseLeave={ev => (ev.currentTarget.style.background = 'transparent')}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── Vendors Tab ── */}
         {activeTab === 'Vendors' && (
           <div>
@@ -711,6 +857,65 @@ export function PlanDetail() {
             />
           </div>
         )}
+
+        {/* ── PERSONAS TAB ──────────────────────────────────────────────────── */}
+        {activeTab === 'Personas' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>Associated Personas</div>
+                <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>
+                  Participant types linked to this plan. Manage associations in the Persona Register.
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/personas')}
+                style={{ height: '32px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'var(--card)', cursor: 'pointer', fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+              >
+                Persona Register
+              </button>
+            </div>
+
+            {linkedPersonas.length === 0 ? (
+              <div style={{ padding: '40px 24px', textAlign: 'center', background: 'var(--muted)', borderRadius: 'var(--radius-card)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                <User size={32} style={{ color: 'var(--muted-foreground)' }} />
+                <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>No personas linked</span>
+                <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>Link this plan to personas from the Plans tab on each persona's detail page.</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px 90px', padding: '8px 14px', background: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>
+                  {['Persona', 'Category', 'Status'].map(h => (
+                    <span key={h} style={{ fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</span>
+                  ))}
+                </div>
+                {linkedPersonas.map((per, idx) => {
+                  const sc = per.status === 'Active' ? { bg: '#E8F5EE', color: '#1C8A45' } : per.status === 'Draft' ? { bg: '#FFF3E0', color: '#E07B00' } : { bg: '#F0F0F0', color: '#6B7489' };
+                  return (
+                    <div
+                      key={per.id}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 160px 90px', padding: '10px 14px', alignItems: 'center', borderTop: idx > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--muted)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      onClick={() => navigate(`/personas/${per.id}`)}
+                    >
+                      <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {per.name}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{per.category}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', height: '18px', padding: '0 7px', borderRadius: '100px', background: sc.bg, color: sc.color, fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', whiteSpace: 'nowrap' }}>
+                        {per.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
 
       {/* Modals */}

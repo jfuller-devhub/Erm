@@ -46,13 +46,15 @@ export interface Process {
   effectiveEndDate: string;
   subProcesses: SubProcess[];
   dependsOnProcessIds: string[];
+  productIds: string[];
+  planIds: string[];
   createdDate: string;
   updatedDate: string;
 }
 
 // ─── LocalStorage helpers ────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'erm_processes_v2';
+const STORAGE_KEY = 'erm_processes_v3';
 
 function sanitizeStep(s: any): Step {
   return {
@@ -101,6 +103,8 @@ function sanitizeProcess(p: any): Process {
       ? p.subProcesses.map(sanitizeSubProcess)
       : [],
     dependsOnProcessIds: Array.isArray(p.dependsOnProcessIds) ? p.dependsOnProcessIds : [],
+    productIds: Array.isArray(p.productIds) ? p.productIds : [],
+    planIds:    Array.isArray(p.planIds)    ? p.planIds    : [],
     createdDate: p.createdDate ?? '',
     updatedDate: p.updatedDate ?? '',
   };

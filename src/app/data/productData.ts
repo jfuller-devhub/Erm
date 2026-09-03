@@ -15,6 +15,8 @@ export interface Product {
   status: ProductStatus;
   tags: string[];
   owner: AppUser | null;
+  processIds: string[];
+  subProcessIds: string[];
   createdDate: string;
   updatedDate: string;
 }
@@ -45,7 +47,7 @@ export const SERVICE_CATEGORIES = [
 
 // ─── LocalStorage helpers ────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'erm_products_v2';
+const STORAGE_KEY = 'erm_products_v3';
 
 function sanitizeProduct(p: any): Product {
   return {
@@ -57,6 +59,8 @@ function sanitizeProduct(p: any): Product {
     status: (['Active', 'Draft', 'Retired', 'Sunset'].includes(p.status) ? p.status : 'Active') as ProductStatus,
     tags: Array.isArray(p.tags) ? p.tags : [],
     owner: p.owner ?? null,
+    processIds:    Array.isArray(p.processIds)    ? p.processIds    : [],
+    subProcessIds: Array.isArray(p.subProcessIds) ? p.subProcessIds : [],
     createdDate: p.createdDate ?? '',
     updatedDate: p.updatedDate ?? '',
   };

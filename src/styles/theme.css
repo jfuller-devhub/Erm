@@ -2,87 +2,68 @@
 
 :root {
   --font-size: 16px;
-  
-  /* Typography Variables */
-  --text-h1: 72px;
-  --text-h2: 52px;
-  --text-h3: 32px;
-  --text-h4: 24px;
-  --text-base: 14px;
-  --font-family-primary: 'Open Sans', sans-serif;
+
+  /* Typography */
+  --text-h1: 48px;
+  --text-h2: 36px;
+  --text-h3: 24px;
+  --text-h4: 18px;
+  --text-base: 13px;
+  --font-family-primary: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: 'Geist Mono', 'JetBrains Mono', monospace;
   --font-weight-regular: 400;
+  --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  
-  /* The default background color for the application — cool blue-tinted canvas. */
-  --background: #ECF2FE;
-  /* The default color for elements or text that appears on top of the background. */
-  --foreground: #1A1F2E;
-  /* The background color for cards, modals, and other containers. */
+
+  /* Page background — clean light gray canvas */
+  --background: #F5F5F5;
+  --foreground: #0D0D0D;
+  /* Cards — pure white for clear separation from canvas */
   --card: #FFFFFF;
-  /* The default color for text or elements that appear on top of cards, modals and other background containers. */
-  --card-foreground: #1A1F2E;
-  /* The background color for dropdowns and tooltips. */
-  --popover: rgb(0 0 0 / 0.9);
-  /* The default color for text or elements that appear on top of dropdowns and tooltips. */
-  --popover-foreground: #FFFFFF;
-  /* The primary color used for buttons, links, and other interactive elements. */
-  --primary: #2322F0;
-  /* The default color for text or elements that appear on top of primary colored elements. */
+  --card-foreground: #0D0D0D;
+  --popover: #FFFFFF;
+  --popover-foreground: #0D0D0D;
+  /* Primary — Linear's precise indigo */
+  --primary: #5E6AD2;
   --primary-foreground: #FFFFFF;
-  /* The secondary color used for secondary(but NOT-DESTRUCTIVE) buttons and interactive elements. */
-  --secondary: #FFFFFF;
-  /* The default color for text or elements that appear on top of secondary colored elements. */
-  --secondary-foreground: #2322F0;
-  /* The muted color used for less prominent elements — neutral light gray for page canvas and subdued surfaces. */
-  --muted: #F0F2F7;
-  /* The default color for text or elements that appear on top of muted colored elements. */
-  --muted-foreground: #6B7489;
-  /* The accent color used for highlights, links, and other interactive elements. */
-  --accent: #2322F0;
-  /* The default color for text or elements that appear on top of accent colored elements. */
+  --secondary: #F3F3F3;
+  --secondary-foreground: #0D0D0D;
+  /* Muted surfaces and labels */
+  --muted: #F3F3F3;
+  --muted-foreground: #737373;
+  --accent: #5E6AD2;
   --accent-foreground: #FFFFFF;
-  /* The color used for background in destructive actions, such as delete buttons or error messages. */
-  --destructive: #C0392B;
-  /* The default color for text or elements that appear on top of destructive colored elements. */
+  --destructive: #DC2626;
   --destructive-foreground: #FFFFFF;
-  /* The default border color — slightly blue-tinted to harmonize with the brand palette. */
-  --border: #CFD7E9;
-  /* The default background color for input fields once the text has been filled. */
+  /* Hairline borders */
+  --border: #E8E8E8;
   --input: #FFFFFF;
-  /* The default background color for input fields, text areas, and other input elements. */
   --input-background: #FFFFFF;
-  /* The color for focus rings, outlines, and other focus indicators. */
-  --ring: #2322F0;
-  /* Shadow for small elevations, such as cards or modals. */
-  --elevation-sm: 0px 1px 3px 0px rgb(35 34 240 / 0.08), 0px 1px 1px 0px rgb(0 0 0 / 0.04);
+  --ring: #5E6AD2;
+  /* Minimal shadow — almost no elevation */
+  --elevation-sm: 0 1px 2px rgba(0,0,0,0.05), 0 1px 4px rgba(0,0,0,0.03);
+  --elevation-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
   /* Chart colors */
-  --chart-1: #0084AA;
-  --chart-2: #00A78E;
-  --chart-3: #7AC274;
-  --chart-4: #E6740A;
-  --chart-5: #63BF02;
-  /* Border radius tokens */
-  --radius: 0px;
-  --radius-card: 3px;
-  --radius-button: 0px;
-  --radius-input: 4px;
-  /* Sidebar — deep navy for strong visual anchor. */
-  --sidebar: #02244C;
-  /* Sidebar text — cool muted blue-white for readability on dark background. */
-  --sidebar-foreground: #94B4DA;
-  /* Active/emphasis color inside sidebar. */
-  --sidebar-primary: #FFFFFF;
-  /* Text on active sidebar elements. */
-  --sidebar-primary-foreground: #02244C;
-  /* Accent color for hover/focus states inside sidebar. */
-  --sidebar-accent: #2322F0;
-  /* Text on accent elements inside sidebar. */
+  --chart-1: #5E6AD2;
+  --chart-2: #26C6A2;
+  --chart-3: #F59E0B;
+  --chart-4: #EF4444;
+  --chart-5: #8B5CF6;
+  /* Border radius — precise, not bubbly */
+  --radius: 6px;
+  --radius-card: 8px;
+  --radius-button: 6px;
+  --radius-input: 6px;
+  /* Sidebar — near-black, Linear-style */
+  --sidebar: #111111;
+  --sidebar-foreground: rgba(255,255,255,0.50);
+  --sidebar-primary: rgba(255,255,255,0.88);
+  --sidebar-primary-foreground: #111111;
+  --sidebar-accent: #5E6AD2;
   --sidebar-accent-foreground: #FFFFFF;
-  /* Border inside sidebar — slightly lighter navy. */
-  --sidebar-border: #003974;
-  /* Focus ring inside sidebar. */
-  --sidebar-ring: #2322F0;
+  --sidebar-border: rgba(255,255,255,0.07);
+  --sidebar-ring: #5E6AD2;
 }
 
 @theme inline {

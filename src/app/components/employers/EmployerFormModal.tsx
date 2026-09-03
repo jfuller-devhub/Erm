@@ -69,7 +69,6 @@ export function EmployerFormModal({ isOpen, onClose, onSave, initialData, allEmp
       name: form.name.trim(),
       code: form.code.trim().toUpperCase(),
       isActive: form.isActive,
-      productIds: initialData?.productIds ?? [],
     });
   }
 

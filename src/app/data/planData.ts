@@ -19,6 +19,7 @@ export interface Plan {
   owner: AppUser | null;
   tags: string[];
   vendorIds: string[];
+  entityIds: string[];
   processAssociations: PlanProcessAssociation[];
   roadmapPurposeAlignment: string;
   roadmapPlanning: string;
@@ -30,7 +31,7 @@ export interface Plan {
   updatedDate: string;
 }
 
-const STORAGE_KEY = 'erm_plans_v1';
+const STORAGE_KEY = 'erm_plans_v2';
 
 function sanitizePlan(p: any): Plan {
   return {
@@ -44,6 +45,7 @@ function sanitizePlan(p: any): Plan {
     owner: p.owner ?? null,
     tags: Array.isArray(p.tags) ? p.tags : [],
     vendorIds: Array.isArray(p.vendorIds) ? p.vendorIds : [],
+    entityIds: Array.isArray(p.entityIds) ? p.entityIds : [],
     processAssociations: Array.isArray(p.processAssociations) ? p.processAssociations : [],
     roadmapPurposeAlignment: p.roadmapPurposeAlignment ?? '',
     roadmapPlanning: p.roadmapPlanning ?? '',
@@ -100,6 +102,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[3],
     tags: ['401k', 'DC', 'Employer Match'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: 'Support long-term employee financial security through tax-advantaged savings.',
     roadmapPlanning: 'Evaluate 2025 safe-harbor match design changes and SECURE 2.0 compliance requirements.',
@@ -121,6 +124,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[3],
     tags: ['Pension', 'DB', 'Legacy', 'Grandfathered'],
     vendorIds: [],
+    entityIds: ['EMP-001'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Plan termination feasibility study scheduled for 2026.',
@@ -142,6 +146,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['PPO', 'Medical', 'Active Employee', 'Broad Network'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: 'Provide comprehensive medical coverage to attract and retain talent.',
     roadmapPlanning: '2025 plan year renewal underway. Evaluating network and cost-sharing changes.',
@@ -163,6 +168,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['HDHP', 'HSA', 'Medical', 'Consumer-Driven'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: 'Offer a consumer-directed health option for cost-conscious employees.',
     roadmapPlanning: 'Evaluate IRS HSA contribution limit changes and employer seed funding strategy.',
@@ -184,6 +190,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['Retiree', 'Medicare Supplement', 'Medigap'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Evaluate individual Medicare marketplace strategy as alternative to group plan.',
@@ -205,6 +212,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['Life Insurance', 'Employer-Paid', 'Voluntary Supplemental'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Review coverage adequacy and carrier contract renewal terms in 2025.',
@@ -226,6 +234,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['STD', 'Disability', 'Income Protection'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Evaluate self-insured STD model and paid family leave integration.',
@@ -247,6 +256,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['LTD', 'Disability', 'Income Protection'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'COLA rider and own-occupation definition review in 2025 carrier renewal.',
@@ -268,6 +278,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[7],
     tags: ['EAP', 'Mental Health', 'Counseling', 'Wellbeing'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Expand digital mental health resources and crisis support line in 2025.',
@@ -289,6 +300,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[3],
     tags: ['Financial Wellness', 'CFP', 'Planning'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Group webinar series and on-demand financial education library expansion in 2025.',
@@ -310,6 +322,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[1],
     tags: ['BenAdmin', 'Enrollment', 'COBRA', 'Eligibility'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003', 'EMP-004', 'EMP-005', 'EMP-006'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'API integration with HRIS and payroll system upgrade in Q2 2025.',
@@ -331,6 +344,7 @@ export const SEED_PLANS: Plan[] = [
     owner: MOCK_USERS[1],
     tags: ['Claims', 'Adjudication', 'Provider Payment', 'Medical', 'Dental'],
     vendorIds: [],
+    entityIds: ['EMP-001', 'EMP-002', 'EMP-003'],
     processAssociations: [],
     roadmapPurposeAlignment: '',
     roadmapPlanning: 'Real-time claims status API for member portal integration in 2025.',
