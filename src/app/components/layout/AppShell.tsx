@@ -37,6 +37,12 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    groupLabel: 'Organization',
+    items: [
+      { path: '/departments', label: 'Department Register', icon: Building2 },
+    ],
+  },
+  {
     groupLabel: 'Risk & Controls',
     items: [
       { path: '/risk-dashboard', label: 'Risk Register',        icon: ShieldAlert },
@@ -109,6 +115,9 @@ function getBreadcrumbs(pathname: string) {
   } else if (pathname.startsWith('/personas')) {
     crumbs.push({ label: 'Persona Register', path: '/personas' });
     if (pathname !== '/personas') crumbs.push({ label: 'Persona Detail', path: pathname });
+  } else if (pathname.startsWith('/departments')) {
+    crumbs.push({ label: 'Department Register', path: '/departments' });
+    if (pathname !== '/departments') crumbs.push({ label: 'Department Detail', path: pathname });
   } else if (pathname.startsWith('/regulations')) {
     crumbs.push({ label: 'Regulations', path: '/regulations' });
     if (pathname !== '/regulations') crumbs.push({ label: 'Regulation Detail', path: pathname });

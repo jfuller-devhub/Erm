@@ -181,13 +181,14 @@ interface IdentifyRiskFormProps {
   categories: RiskCategory[];
   subProcesses: SubProcess[];
   process: Process;
+  riskTypes: string[];
   onChange: (patch: Partial<IdentifyFormState>) => void;
   onSubmit: () => void;
   onCancel: () => void;
 }
 
 function IdentifyRiskForm({
-  form, errors, categories, subProcesses, onChange, onSubmit, onCancel,
+  form, errors, categories, subProcesses, riskTypes, onChange, onSubmit, onCancel,
 }: IdentifyRiskFormProps) {
   return (
     <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
@@ -612,6 +613,7 @@ interface LinkRiskModalProps {
   availableRisks: Risk[];
   allRisks: Risk[];
   subProcesses: SubProcess[];
+  riskTypes: string[];
   search: string;
   statusFilter: string;
   typeFilter: string;
@@ -632,7 +634,7 @@ interface LinkRiskModalProps {
 const RISK_STATUSES_FILTER = ['draft', 'active', 'closed', 'archived'] as const;
 
 function LinkRiskModal({
-  availableRisks, subProcesses, search, statusFilter, typeFilter, selectedRiskId,
+  availableRisks, subProcesses, riskTypes, search, statusFilter, typeFilter, selectedRiskId,
   subProcessId, notes, latestAssessmentMap,
   onSearchChange, onStatusFilterChange, onTypeFilterChange, onSelectRisk,
   onSubProcessChange, onNotesChange, onLink, onClose,
@@ -1322,6 +1324,7 @@ export function ProcessRisksTab({ process, navigate, onCountChange }: ProcessRis
             categories={categories}
             subProcesses={subs}
             process={process}
+            riskTypes={riskTypes}
             onChange={patch => setIdentifyForm(f => ({ ...f, ...patch }))}
             onSubmit={handleIdentifySubmit}
             onCancel={handleCancelIdentify}
@@ -1357,6 +1360,7 @@ export function ProcessRisksTab({ process, navigate, onCountChange }: ProcessRis
           availableRisks={availableToLink}
           allRisks={allRisks}
           subProcesses={subs}
+          riskTypes={riskTypes}
           search={linkSearch}
           statusFilter={linkStatusFilter}
           typeFilter={linkTypeFilter}

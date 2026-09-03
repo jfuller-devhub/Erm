@@ -34,6 +34,8 @@ import { RegulatoryComplianceDashboard } from './pages/RegulatoryComplianceDashb
 import { PlanDetail } from './pages/PlanDetail';
 import { PersonaList } from './pages/PersonaList';
 import { PersonaDetail } from './pages/PersonaDetail';
+import { DepartmentList } from './pages/DepartmentList';
+import { DepartmentDetail } from './pages/DepartmentDetail';
 
 export const router = createBrowserRouter([
   {
@@ -75,6 +77,8 @@ export const router = createBrowserRouter([
       { path: 'entities/:id', Component: EmployerDetail },
       { path: 'personas', Component: PersonaList },
       { path: 'personas/:id', Component: PersonaDetail },
+      { path: 'departments', Component: DepartmentList },
+      { path: 'departments/:id', Component: DepartmentDetail },
       { path: 'regulations', Component: RegulationRegister },
       { path: 'regulations/:id', Component: RegulationDetail },
       { path: 'bills', Component: BillTracker },

@@ -166,6 +166,9 @@ export function ProductFormModal({
       status,
       tags,
       owner,
+      departmentIds: editingProduct?.departmentIds ?? [],
+      processIds: editingProduct?.processIds ?? [],
+      subProcessIds: editingProduct?.subProcessIds ?? [],
       createdDate: editingProduct?.createdDate ?? today,
       updatedDate: today,
     };
@@ -265,6 +268,7 @@ export function ProductFormModal({
         <Field label="Tags" helpText="Add keywords to help with search and filtering.">
           <TagInput value={tags} onChange={setTags} />
         </Field>
+
       </div>
     </FormModal>
   );

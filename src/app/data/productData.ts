@@ -15,6 +15,7 @@ export interface Product {
   status: ProductStatus;
   tags: string[];
   owner: AppUser | null;
+  departmentIds: string[];
   processIds: string[];
   subProcessIds: string[];
   createdDate: string;
@@ -59,6 +60,7 @@ function sanitizeProduct(p: any): Product {
     status: (['Active', 'Draft', 'Retired', 'Sunset'].includes(p.status) ? p.status : 'Active') as ProductStatus,
     tags: Array.isArray(p.tags) ? p.tags : [],
     owner: p.owner ?? null,
+    departmentIds: Array.isArray(p.departmentIds) ? p.departmentIds : [],
     processIds:    Array.isArray(p.processIds)    ? p.processIds    : [],
     subProcessIds: Array.isArray(p.subProcessIds) ? p.subProcessIds : [],
     createdDate: p.createdDate ?? '',

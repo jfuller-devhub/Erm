@@ -20,6 +20,7 @@ export interface Plan {
   tags: string[];
   vendorIds: string[];
   entityIds: string[];
+  departmentIds: string[];
   processAssociations: PlanProcessAssociation[];
   roadmapPurposeAlignment: string;
   roadmapPlanning: string;
@@ -46,6 +47,7 @@ function sanitizePlan(p: any): Plan {
     tags: Array.isArray(p.tags) ? p.tags : [],
     vendorIds: Array.isArray(p.vendorIds) ? p.vendorIds : [],
     entityIds: Array.isArray(p.entityIds) ? p.entityIds : [],
+    departmentIds: Array.isArray(p.departmentIds) ? p.departmentIds : [],
     processAssociations: Array.isArray(p.processAssociations) ? p.processAssociations : [],
     roadmapPurposeAlignment: p.roadmapPurposeAlignment ?? '',
     roadmapPlanning: p.roadmapPlanning ?? '',

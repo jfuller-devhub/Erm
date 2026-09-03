@@ -3,10 +3,12 @@ import { useParams, useNavigate } from 'react-router';
 import {
   ArrowLeft, Edit2, Plus, CalendarDays, User, Tag,
   FileText, Shield, DollarSign, BarChart2, Smile, Target,
-  Building2, GitBranch, Search, X,
+  Building2, GitBranch, X, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import type { Plan, PlanStatus } from '../data/planData';
 import { loadPlans, savePlans, updatePlan } from '../data/planData';
+import type { Department } from '../data/departmentData';
+import { loadDepartments } from '../data/departmentData';
 import type { Benefit, QnxtConfigStatus } from '../data/benefitData';
 import { loadBenefits } from '../data/benefitData';
 import type { Product } from '../data/productData';
@@ -192,8 +194,210 @@ function OutlineButton({ onClick, children }: { onClick: () => void; children: R
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
-type Tab = 'Overview' | 'Benefits' | 'Entities' | 'Vendors' | 'Processes' | 'Roadmap' | 'Personas';
-const TABS: Tab[] = ['Overview', 'Benefits', 'Entities', 'Vendors', 'Processes', 'Roadmap', 'Personas'];
+// ─── Department type styles ───────────────────────────────────────────────────
+
+const DEPT_TYPE_STYLES: Record<string, { bg: string; color: string }> = {
+  Division:   { bg: '#EEF2FF', color: '#4338CA' },
+  Department: { bg: '#E0F2FE', color: '#0369A1' },
+  Team:       { bg: '#D1FAE5', color: '#065F46' },
+  Unit:       { bg: '#F3F4F6', color: '#374151' },
+};
+
+// ─── Plan Departments Tab ─────────────────────────────────────────────────────
+
+function PlanDeptTreePicker({
+  deptIds,
+  allDepts,
+  onLink,
+}: {
+  deptIds: string[];
+  allDepts: Department[];
+  onLink: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const active = allDepts.filter(d => d.status === 'Active');
+  const roots = active.filter(d => d.parentId === '');
+
+  function toggleExpand(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function getChildren(parentId: string) {
+    return active.filter(d => d.parentId === parentId);
+  }
+
+  function renderNode(dept: Department, depth: number): React.ReactNode {
+    const kids = getChildren(dept.id);
+    const isOpen = expanded.has(dept.id);
+    const isLinked = deptIds.includes(dept.id);
+    const ts = DEPT_TYPE_STYLES[dept.type] ?? { bg: '#F3F4F6', color: '#374151' };
+    return (
+      <div key={dept.id} style={{ borderBottom: '1px solid var(--border)' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '8px 12px', paddingLeft: `${12 + depth * 20}px`,
+          background: depth > 0 ? 'rgba(0,0,0,0.02)' : undefined,
+        }}>
+          {kids.length > 0 ? (
+            <button type="button" onClick={() => toggleExpand(dept.id)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--muted-foreground)', flexShrink: 0 }}>
+              {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          ) : <span style={{ width: '14px', flexShrink: 0 }} />}
+          <Building2 size={13} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+          <span style={{ flex: 1, fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>
+            {dept.name}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', height: '18px', padding: '0 6px', borderRadius: '100px', background: ts.bg, color: ts.color, fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 600, flexShrink: 0 }}>
+            {dept.type}
+          </span>
+          <button type="button" disabled={isLinked} onClick={() => onLink(dept.id)}
+            style={{ height: '24px', padding: '0 10px', border: `1px solid ${isLinked ? 'var(--border)' : 'var(--primary)'}`, borderRadius: 'var(--radius-button)', background: isLinked ? 'var(--muted)' : 'transparent', color: isLinked ? 'var(--muted-foreground)' : 'var(--primary)', fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', cursor: isLinked ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            {isLinked ? 'Linked' : <><Plus size={10} /> Add</>}
+          </button>
+        </div>
+        {isOpen && kids.map(kid => renderNode(kid, depth + 1))}
+      </div>
+    );
+  }
+
+  if (roots.length === 0) {
+    return (
+      <div style={{ padding: '16px', textAlign: 'center', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>
+        No departments available.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', background: 'var(--card)', maxHeight: '280px', overflowY: 'auto' }}>
+      {roots.map(r => renderNode(r, 0))}
+    </div>
+  );
+}
+
+function PlanDepartmentsTab({
+  plan, allDepts, onLink, onUnlink, navigate,
+}: {
+  plan: Plan;
+  allDepts: Department[];
+  onLink: (deptId: string) => void;
+  onUnlink: (deptId: string) => void;
+  navigate: (path: string) => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [unlinkConfirm, setUnlinkConfirm] = useState<string | null>(null);
+
+  const deptIds = plan.departmentIds ?? [];
+  const linked = allDepts.filter(d => deptIds.includes(d.id));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* Toolbar */}
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Building2 size={16} style={{ color: 'var(--primary)' }} />
+          <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>Departments</span>
+          <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', background: 'var(--muted)', border: '1px solid var(--border)', borderRadius: '100px', padding: '1px 8px', lineHeight: '18px' }}>
+            {linked.length}
+          </span>
+        </div>
+        <button
+          onClick={() => setShowPicker(o => !o)}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', padding: '0 12px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+        >
+          <Plus size={14} /> Link Department
+        </button>
+      </div>
+
+      {/* Picker panel */}
+      {showPicker && (
+        <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--muted)', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+            Select a Division, Department, or Team
+          </div>
+          <PlanDeptTreePicker deptIds={deptIds} allDepts={allDepts} onLink={onLink} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={() => setShowPicker(false)}
+              style={{ height: '28px', padding: '0 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'var(--card)', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: '12px', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Linked list */}
+      {linked.length === 0 && !showPicker ? (
+        <div style={{ padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+          <Building2 size={40} style={{ color: 'var(--muted-foreground)' }} />
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: '14px', fontWeight: 'var(--font-weight-semibold)', color: 'var(--foreground)' }}>No departments linked</div>
+          <div style={{ fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', color: 'var(--muted-foreground)' }}>Associate this plan with a division, department, or team.</div>
+          <button onClick={() => setShowPicker(true)}
+            style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--primary)', color: 'var(--primary-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}>
+            <Plus size={14} /> Link Department
+          </button>
+        </div>
+      ) : linked.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', padding: '0 16px 16px' }}>
+          {linked.map((dept, idx) => {
+            const isFirst = idx === 0;
+            const isLast = idx === linked.length - 1;
+            const radius = isFirst && isLast ? 'var(--radius-card)' : isFirst ? 'var(--radius-card) var(--radius-card) 0 0' : isLast ? '0 0 var(--radius-card) var(--radius-card)' : '0';
+            const ts = DEPT_TYPE_STYLES[dept.type] ?? { bg: '#F3F4F6', color: '#374151' };
+            return (
+              <div key={dept.id}
+                style={{ background: 'var(--card)', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)', borderTop: '1px solid var(--border)', borderBottom: isLast ? '1px solid var(--border)' : 'none', borderRadius: radius, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '12px', transition: 'background 0.1s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--muted)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--card)'; }}
+              >
+                <Building2 size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <button type="button" onClick={() => navigate(`/departments/${dept.id}`)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--font-family-primary)', fontSize: 'var(--text-base)', fontWeight: 'var(--font-weight-semibold)', color: 'var(--primary)', textAlign: 'left' }}>
+                  {dept.name}
+                </button>
+                <span style={{ display: 'inline-flex', alignItems: 'center', height: '20px', padding: '0 8px', borderRadius: '100px', background: ts.bg, color: ts.color, fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', flexShrink: 0 }}>{dept.type}</span>
+                <span style={{ flex: 1 }} />
+                {unlinkConfirm === dept.id ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'var(--font-family-primary)', fontSize: '12px', color: 'var(--muted-foreground)' }}>Unlink?</span>
+                    <button type="button" onClick={() => { onUnlink(dept.id); setUnlinkConfirm(null); }}
+                      style={{ height: '24px', padding: '0 8px', border: 'none', borderRadius: 'var(--radius-button)', background: 'var(--destructive)', color: 'var(--destructive-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer' }}>
+                      Confirm
+                    </button>
+                    <button type="button" onClick={() => setUnlinkConfirm(null)}
+                      style={{ height: '24px', padding: '0 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--foreground)', fontFamily: 'var(--font-family-primary)', fontSize: '11px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setUnlinkConfirm(dept.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '24px', padding: '0 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-button)', background: 'transparent', color: 'var(--muted-foreground)', fontFamily: 'var(--font-family-primary)', fontSize: '11px', fontWeight: 'var(--font-weight-semibold)', cursor: 'pointer', flexShrink: 0 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--destructive)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--destructive)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--muted-foreground)'; }}>
+                    <X size={10} /> Unlink
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ─── Tab types ────────────────────────────────────────────────────────────────
+
+type Tab = 'Overview' | 'Benefits' | 'Entities' | 'Vendors' | 'Processes' | 'Roadmap' | 'Personas' | 'Departments';
+const TABS: Tab[] = ['Overview', 'Benefits', 'Entities', 'Vendors', 'Processes', 'Roadmap', 'Personas', 'Departments'];
 
 function TabBar({ active, onChange, counts }: { active: Tab; onChange: (t: Tab) => void; counts?: Partial<Record<Tab, number>> }) {
   return (
@@ -248,6 +452,7 @@ export function PlanDetail() {
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [allEntities, setAllEntities] = useState<Employer[]>([]);
   const [allPersonas, setAllPersonas] = useState<Persona[]>([]);
+  const [allDepts, setAllDepts] = useState<Department[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('Overview');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [benefitModalOpen, setBenefitModalOpen] = useState(false);
@@ -268,6 +473,7 @@ export function PlanDetail() {
     }
     setAllEntities(loadEmployers());
     setAllPersonas(loadPersonas());
+    setAllDepts(loadDepartments());
   }, [id]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -284,12 +490,15 @@ export function PlanDetail() {
   const linkedEntities = allEntities.filter(e => (plan.entityIds ?? []).includes(e.id));
   const linkedPersonas = allPersonas.filter(per => (per.planIds ?? []).includes(plan.id));
 
+  const linkedDepts = allDepts.filter(d => (plan.departmentIds ?? []).includes(d.id));
+
   const tabCounts: Partial<Record<Tab, number>> = {
     Benefits: benefits.length,
     Entities: linkedEntities.length,
     Vendors: linkedVendors.length,
     Processes: plan.processAssociations.length,
     Personas: linkedPersonas.length,
+    Departments: linkedDepts.length,
   };
 
   function handleLinkEntity(entityId: string) {
@@ -308,6 +517,20 @@ export function PlanDetail() {
     const updated = { ...plan, entityIds: plan.entityIds.filter(eid => eid !== entityId) };
     const allPlans = loadPlans();
     savePlans(allPlans.map(p => p.id === plan.id ? updated : p));
+    setPlan(updated);
+  }
+
+  function handleLinkDept(deptId: string) {
+    if (!plan || (plan.departmentIds ?? []).includes(deptId)) return;
+    const updated = { ...plan, departmentIds: [...(plan.departmentIds ?? []), deptId] };
+    savePlans(loadPlans().map(p => p.id === plan.id ? updated : p));
+    setPlan(updated);
+  }
+
+  function handleUnlinkDept(deptId: string) {
+    if (!plan) return;
+    const updated = { ...plan, departmentIds: (plan.departmentIds ?? []).filter(id => id !== deptId) };
+    savePlans(loadPlans().map(p => p.id === plan.id ? updated : p));
     setPlan(updated);
   }
 
@@ -913,6 +1136,19 @@ export function PlanDetail() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Departments Tab ── */}
+        {activeTab === 'Departments' && (
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-sm)', overflow: 'hidden' }}>
+            <PlanDepartmentsTab
+              plan={plan}
+              allDepts={allDepts}
+              onLink={handleLinkDept}
+              onUnlink={handleUnlinkDept}
+              navigate={navigate}
+            />
           </div>
         )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Plus, Trash2, ChevronDown, ChevronRight, GitBranch,
-  ListOrdered, Tag, X, Building2,
+  ListOrdered, Tag, X,
 } from 'lucide-react';
 import { FormModal, Field, TextInput, TextareaInput, SelectInput } from '../shared/FormModal';
 import { UserPickerInput } from '../shared/UserPicker';
@@ -527,6 +527,9 @@ export function ProcessFormModal({
       effectiveEndDate,
       subProcesses: finalSubs,
       dependsOnProcessIds,
+      departmentIds: editingProcess?.departmentIds ?? [],
+      productIds: editingProcess?.productIds ?? [],
+      planIds: editingProcess?.planIds ?? [],
       createdDate: editingProcess?.createdDate ?? today,
       updatedDate: today,
     };

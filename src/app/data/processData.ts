@@ -46,6 +46,7 @@ export interface Process {
   effectiveEndDate: string;
   subProcesses: SubProcess[];
   dependsOnProcessIds: string[];
+  departmentIds: string[];
   productIds: string[];
   planIds: string[];
   createdDate: string;
@@ -103,6 +104,7 @@ function sanitizeProcess(p: any): Process {
       ? p.subProcesses.map(sanitizeSubProcess)
       : [],
     dependsOnProcessIds: Array.isArray(p.dependsOnProcessIds) ? p.dependsOnProcessIds : [],
+    departmentIds: Array.isArray(p.departmentIds) ? p.departmentIds : [],
     productIds: Array.isArray(p.productIds) ? p.productIds : [],
     planIds:    Array.isArray(p.planIds)    ? p.planIds    : [],
     createdDate: p.createdDate ?? '',

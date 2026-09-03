@@ -366,6 +366,7 @@ export function PlanFormModal({
       owner,
       tags,
       vendorIds,
+      departmentIds: editingPlan?.departmentIds ?? [],
       processAssociations,
       roadmapPurposeAlignment: editingPlan?.roadmapPurposeAlignment ?? '',
       roadmapPlanning: editingPlan?.roadmapPlanning ?? '',
